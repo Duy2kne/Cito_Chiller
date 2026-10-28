@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Wrench,
   Gauge,
@@ -45,7 +45,23 @@ export const TechTab: React.FC<TechTabProps> = ({
   const [offW, setOffW] = useState<number>(config?.off_w ?? 0);
   const [offC, setOffC] = useState<number>(config?.off_c ?? 0);
   const [offH, setOffH] = useState<number>(config?.off_h ?? 0);
+  const [kF, setKF] = useState<number>(config?.k_f ?? 82.7);
+  const [kP1, setKP1] = useState<number>(config?.k_p1 ?? 82.7);
+  const [kP2, setKP2] = useState<number>(config?.k_p2 ?? 82.7);
   const [isCalibratingZero, setIsCalibratingZero] = useState<boolean>(false);
+
+  // Gia tri trong o lay theo may moi khi goi "cf" doi (mo tab truoc khi co cf, hoac doi tren may).
+  // Khong dong bo -> o dang la 0 / 82.7 mac dinh, bam Luu se GHI DE gia tri that cua may.
+  useEffect(() => {
+    if (config?.off_w !== undefined) setOffW(config.off_w);
+    if (config?.off_c !== undefined) setOffC(config.off_c);
+    if (config?.off_h !== undefined) setOffH(config.off_h);
+  }, [config?.off_w, config?.off_c, config?.off_h]);
+  useEffect(() => {
+    if (config?.k_f !== undefined) setKF(config.k_f);
+    if (config?.k_p1 !== undefined) setKP1(config.k_p1);
+    if (config?.k_p2 !== undefined) setKP2(config.k_p2);
+  }, [config?.k_f, config?.k_p1, config?.k_p2]);
 
   // WiFi inputs
   const [selectedSsid, setSelectedSsid] = useState<string>('');
@@ -101,6 +117,16 @@ export const TechTab: React.FC<TechTabProps> = ({
       });
     } catch (e) {
       console.warn('Failed to save offsets', e);
+    }
+  };
+
+  // He so ACS712 (so dem ADC / 1 A), may ep vao 33 - 207
+  const handleSaveAcsK = async () => {
+    if (!isConnected) return;
+    try {
+      await bleManager.setConfig({ k_f: kF, k_p1: kP1, k_p2: kP2 });
+    } catch (e) {
+      console.warn('Failed to save ACS factors', e);
     }
   };
 
@@ -278,10 +304,46 @@ export const TechTab: React.FC<TechTabProps> = ({
           )}
 
           <div className="text-[11px] text-slate-400 border-t border-slate-800 pt-2 space-y-1 font-mono">
-            <div>Điện áp 0A hiện tại: z_f={config?.z_f ?? 1.65}V | z_p1={config?.z_p1 ?? 1.65}V | z_p2={config?.z_p2 ?? 1.65}V</div>
-            <div>Hệ số: k_f={config?.k_f ?? 82.7} | k_p1={config?.k_p1 ?? 82.7} | k_p2={config?.k_p2 ?? 82.7}</div>
-            <div className="text-cyan-400/90 italic font-sans">
-              Công thức chỉnh hệ số: Hệ số mới = Hệ số cũ × (Dòng trên App / Dòng ampe kìm thật)
+            <div>Điện áp 0A hiện tại: z_f={config?.z_f ?? '—'}V | z_p1={config?.z_p1 ?? '—'}V | z_p2={config?.z_p2 ?? '—'}V</div>
+          </div>
+
+          {/* He so ACS712: chinh theo ampe kim */}
+          <div className="space-y-2 border-t border-slate-800 pt-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-semibold text-slate-200">Hệ số cảm biến dòng (số đếm / 1 A)</span>
+              <button
+                onClick={handleSaveAcsK}
+                disabled={!isConnected}
+                className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition"
+              >
+                Lưu Hệ Số
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              {(
+                [
+                  ['Quạt', kF, setKF],
+                  ['Sò 1 + van', kP1, setKP1],
+                  ['Sò 2', kP2, setKP2],
+                ] as [string, number, (v: number) => void][]
+              ).map(([label, val, set]) => (
+                <div key={label} className="bg-slate-950/60 p-2 rounded-xl border border-slate-800 text-center">
+                  <span className="text-slate-400 block mb-1">{label}</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={33}
+                    max={207}
+                    value={val}
+                    onChange={(e) => set(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-center font-mono text-cyan-300 font-bold"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="text-[11px] text-cyan-400/90 italic">
+              Chạy 1 tải ở mục Kiểm tra, đo bằng ampe kìm: Hệ số mới = Hệ số cũ × (Dòng trên App / Dòng ampe kìm).
+              Mặc định 82.7 (ACS712-20A).
             </div>
           </div>
         </div>

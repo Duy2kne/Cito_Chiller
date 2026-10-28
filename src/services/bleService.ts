@@ -5,6 +5,7 @@
 
 import { AnyPacket, PacketAck } from '../types/system';
 import { DemoChillerDevice } from './demo';
+import { localEpochNow } from './history';
 import { AppState, INITIAL_APP_STATE, PacketFramingBuffer, applyPacket } from './packetParser';
 
 export const CHILLER_SERVICE_UUID = 'f54c14eb-99db-4d72-85fa-a58e08cc73d6';
@@ -377,6 +378,8 @@ export class ChillerBleManager {
             this.setConnectionState('connected', this.deviceName);
             this.reconnectAttempt = 0;
             this.notifyToast('success', pkt.msg || 'Kết nối thành công!');
+            // May khong co dong ho: gui gio dien thoai -> nhat ky co gio that
+            this.sendCommand('TIME_SET', { t: localEpochNow() }).catch(() => undefined);
           } else {
             this.notifyPinRequired(pkt.msg || 'Mã PIN không đúng');
             this.notifyToast('error', pkt.msg || 'Sai mã PIN');
@@ -551,6 +554,14 @@ export class ChillerBleManager {
       this.setSavedPin(pin);
     }
     return res;
+  }
+
+  public async getHistory(): Promise<PacketAck> {
+    return this.sendCommand('GET_HISTORY');
+  }
+
+  public async clearHistory(): Promise<PacketAck> {
+    return this.sendCommand('CLEAR_HISTORY');
   }
 
   public async sendSim(line: string): Promise<PacketAck> {

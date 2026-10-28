@@ -16,11 +16,13 @@ import {
   CheckCircle2,
   Info,
   X,
+  History,
 } from 'lucide-react';
 import { ConnectModal } from './components/ConnectModal';
 import { HomeTab } from './components/HomeTab';
 import { SettingsTab } from './components/SettingsTab';
 import { TechTab } from './components/TechTab';
+import { HistoryTab } from './components/HistoryTab';
 import { bleManager, ConnectionState } from './services/bleService';
 import { AppState } from './services/packetParser';
 
@@ -31,7 +33,7 @@ interface ToastItem {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'settings' | 'tech'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'settings' | 'tech' | 'history'>('home');
   const [appState, setAppState] = useState<AppState>(() => bleManager.getState());
   const [connectionState, setConnectionState] = useState<ConnectionState>(() =>
     bleManager.getConnectionState()
@@ -241,11 +243,21 @@ export default function App() {
             isDemo={isDemo}
           />
         )}
+
+        {activeTab === 'history' && (
+          <HistoryTab
+            history={appState.history}
+            historyMax={appState.historyMax}
+            loading={appState.historyLoading}
+            isConnected={isConnected}
+            onOpenConnectModal={() => setIsConnectModalOpen(true)}
+          />
+        )}
       </main>
 
-      {/* Bottom Navigation Bar (3 Tabs) */}
+      {/* Bottom Navigation Bar (4 Tabs) */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 py-2 px-4 shadow-2xl">
-        <div className="max-w-xl mx-auto grid grid-cols-3 gap-2">
+        <div className="max-w-xl mx-auto grid grid-cols-4 gap-1.5">
           <button
             onClick={() => setActiveTab('home')}
             className={`py-2 px-3 rounded-xl flex flex-col items-center justify-center transition cursor-pointer ${
@@ -280,6 +292,18 @@ export default function App() {
           >
             <Wrench className="w-5 h-5 mb-1" />
             <span className="text-[11px]">Kỹ Thuật</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`py-2 px-3 rounded-xl flex flex-col items-center justify-center transition cursor-pointer ${
+              activeTab === 'history'
+                ? 'text-cyan-400 bg-cyan-500/10 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <History className="w-5 h-5 mb-1" />
+            <span className="text-[11px]">Nhật Ký</span>
           </button>
         </div>
       </nav>

@@ -27,6 +27,7 @@ export interface ChillerStatus {
     ma: number; // Total fan current in mA
     rpm: [number, number]; // [fan1_rpm, fan2_rpm]
     bad: [number, number]; // [fan1_bad, fan2_bad] locked fault flags
+    ok?: number; // 1 = both fans reached stable RPM (firmware only switches a TEC on after this, also in TEST)
   };
   err: number; // Error bitmask (bit b = E(b+1))
   wrn: number; // Warning bitmask (warning only, machine keeps running)
@@ -259,10 +260,12 @@ export function parseErrors(errMask: number, wrnMask: number): {
   let hasLocked = false;
   let hasWarningOnly = false;
 
+  // Firmware: wrn la TAP CON cua err (bit canh bao co mat trong ca 2). Bit co trong wrn = chi canh bao,
+  // may van chay - KHONG duoc coi la loi dung may.
   for (let b = 0; b < 12; b++) {
     const errorNum = b + 1;
-    const isError = (errMask & (1 << b)) !== 0;
     const isWarning = (wrnMask & (1 << b)) !== 0;
+    const isError = (errMask & (1 << b)) !== 0 && !isWarning;
 
     if (isError || isWarning) {
       const def = ERROR_DEFINITIONS[errorNum] || {

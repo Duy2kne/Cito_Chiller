@@ -35,6 +35,7 @@ export class DemoChillerDevice {
       ma: 580,
       rpm: [2720, 2760],
       bad: [0, 0],
+      ok: 1,
     },
     err: 0,
     wrn: 0,
@@ -105,6 +106,50 @@ export class DemoChillerDevice {
 
   private cooldownTimer: number = 0;
 
+  // TEST giong firmware (_update_test trong chiller.cpp): so chi bat khi 2 quat da dat RPM on dinh
+  // (~1 s kick + 3 s xac nhan), 2 so bat cach nhau 10 s, co so thi quat >= fan_min.
+  private testFanOnSec: number = 0;
+  private testLastTecChange: number = -100;
+
+  private stopTestState() {
+    this.status.tst = { on: 0, left: 0, p1: 0, p2: 0, fan: 0 };
+    for (const i of [0, 1]) {
+      this.status.p[i][0] = 0;
+      this.status.p[i][4] = 0;
+    }
+    this.status.f.ok = 0;
+    this.testFanOnSec = 0;
+    this.status.st = this.status.pw ? 1 : 0;
+    this.status.ph = this.status.pw ? 'READY' : 'OFF';
+  }
+
+  private updateTest() {
+    const tst = this.status.tst;
+    const anyReq = (tst.p1 && this.config.pel1_en) || (tst.p2 && this.config.pel2_en);
+    let fan = tst.fan;
+    if (anyReq && fan < this.config.fan_min) fan = this.config.fan_min;
+    this.testFanOnSec = fan > 0 ? this.testFanOnSec : 0;
+    const fansOk = fan > 0 && this.testFanOnSec >= 4;
+
+    this.status.f.pct = fan;
+    this.status.f.ok = fansOk ? 1 : 0;
+    this.status.f.rpm = fan > 0 ? [Math.round(1500 + fan * 15), Math.round(1520 + fan * 15)] : [0, 0];
+    this.status.f.ma = fan > 0 ? Math.round(200 + fan * 5) : 0;
+
+    const req = [tst.p1 && this.config.pel1_en, tst.p2 && this.config.pel2_en];
+    const amps = [4200, 3800];
+    for (const i of [0, 1]) {
+      const on = this.status.p[i][0] === 1;
+      if (req[i] && !on && fansOk && this.status.up - this.testLastTecChange >= 10) {
+        this.status.p[i][0] = 1;
+        this.testLastTecChange = this.status.up;
+      } else if (!req[i] && on) {
+        this.status.p[i][0] = 0;
+      }
+      this.status.p[i][4] = this.status.p[i][0] ? amps[i] : 0;
+    }
+  }
+
   constructor(onPacket: (packet: AnyPacket) => void) {
     this.onPacketCallback = onPacket;
   }
@@ -141,20 +186,20 @@ export class DemoChillerDevice {
 
     // In Test Mode
     if (this.status.tst.on) {
+      if (this.status.f.pct > 0) this.testFanOnSec += 1;
+      this.updateTest();
       if (this.status.tst.left > 0) {
         this.status.tst.left -= 1;
         if (this.status.tst.left === 0) {
-          this.status.tst.on = 0;
-          this.status.st = this.status.pw ? 1 : 0;
-          this.status.ph = this.status.pw ? 'READY' : 'OFF';
+          this.stopTestState();
         }
       }
       this.sendPacket({ ...this.status, t: 'st' });
       return;
     }
 
-    // Normal operation simulation
-    if (this.status.err !== 0) {
+    // Normal operation simulation (chi loi THAT moi dung may; wrn = canh bao, may van chay)
+    if ((this.status.err & ~this.status.wrn) !== 0) {
       this.status.st = 5; // FAULT
       this.status.ph = 'FAULT';
       this.status.p[0][0] = 0;
@@ -350,6 +395,12 @@ export class DemoChillerDevice {
         break;
       }
       case 'SET': {
+        // Giong firmware: co khoa la -> tu choi CA lenh, khong doi gi
+        const unknown = Object.keys(p).filter((k) => !(k in this.config) || ['fw', 'dev', 'ssid', 'rst', 'pend', 'ap'].includes(k));
+        if (unknown.length > 0) {
+          this.sendPacket({ t: 'ack', a: 'SET', ok: false, msg: 'Khóa cài đặt không hợp lệ' });
+          return;
+        }
         let changed = false;
         for (const [key, val] of Object.entries(p)) {
           if (key in this.config) {
@@ -376,29 +427,23 @@ export class DemoChillerDevice {
         break;
       }
       case 'TEST_START': {
-        this.status.tst = {
-          on: 1,
-          left: 600,
-          p1: 0,
-          p2: 0,
-          fan: 30,
-        };
+        if (this.status.tst.on) {
+          this.status.tst.left = 600;          // Firmware: dang TEST thi chi gia han, giu nguyen lenh
+        } else {
+          this.status.tst = { on: 1, left: 600, p1: 0, p2: 0, fan: 0 };
+          this.status.p[0][0] = 0;
+          this.status.p[1][0] = 0;
+          this.testFanOnSec = 0;
+          this.updateTest();
+        }
         this.status.st = 6;
         this.status.ph = 'TEST (APP)';
-        this.sendPacket({ t: 'ack', a: 'TEST_START', ok: true, msg: 'Đã vào chế độ kiểm tra (10 phút)' });
+        this.sendPacket({ t: 'ack', a: 'TEST_START', ok: true, msg: 'Đã vào chế độ kiểm tra' });
         this.sendPacket({ ...this.status, t: 'st' });
         break;
       }
       case 'TEST_STOP': {
-        this.status.tst = {
-          on: 0,
-          left: 0,
-          p1: 0,
-          p2: 0,
-          fan: 0,
-        };
-        this.status.st = this.status.pw ? 1 : 0;
-        this.status.ph = this.status.pw ? 'READY' : 'OFF';
+        this.stopTestState();
         this.sendPacket({ t: 'ack', a: 'TEST_STOP', ok: true, msg: 'Đã thoát chế độ kiểm tra' });
         this.sendPacket({ ...this.status, t: 'st' });
         break;
@@ -415,25 +460,10 @@ export class DemoChillerDevice {
         this.status.tst.p1 = p1 ? 1 : 0;
         this.status.tst.p2 = p2 ? 1 : 0;
         this.status.tst.fan = fan;
+        this.status.tst.left = 600;            // Firmware: moi thao tac tinh lai thoi gian tu thoat
+        this.updateTest();                     // So chi bat sau khi quat dat RPM + cach nhau 10 s
 
-        this.status.f.pct = fan;
-        this.status.f.rpm = fan > 0 ? [Math.round(1500 + fan * 15), Math.round(1520 + fan * 15)] : [0, 0];
-        this.status.f.ma = fan > 0 ? Math.round(200 + fan * 5) : 0;
-
-        // Safety: TECs only turn on if fan RPM is verified
-        if (fan >= 20) {
-          this.status.p[0][0] = p1 ? 1 : 0;
-          this.status.p[0][4] = p1 ? 4200 : 0;
-          this.status.p[1][0] = p2 ? 1 : 0;
-          this.status.p[1][4] = p2 ? 3800 : 0;
-        } else {
-          this.status.p[0][0] = 0;
-          this.status.p[0][4] = 0;
-          this.status.p[1][0] = 0;
-          this.status.p[1][4] = 0;
-        }
-
-        this.sendPacket({ t: 'ack', a: 'TEST_SET', ok: true, msg: 'Đã cập nhật lệnh test' });
+        this.sendPacket({ t: 'ack', a: 'TEST_SET', ok: true });
         this.sendPacket({ ...this.status, t: 'st' });
         break;
       }
@@ -539,11 +569,13 @@ export class DemoChillerDevice {
 
         if (line === 'w x') {
           this.status.w = null;
-          this.status.wrn |= 1 << 0; // E1
+          this.status.err |= 1 << 0; // E1 - giong firmware: bit canh bao co ca trong err lan wrn
+          this.status.wrn |= 1 << 0;
           simResult = 'Đã ngắt cảm biến nước T1 (null, E1)';
         } else if (line.startsWith('w ')) {
           const val = parseFloat(line.slice(2));
           this.status.w = isNaN(val) ? 25.0 : val;
+          this.status.err &= ~(1 << 0);
           this.status.wrn &= ~(1 << 0);
           simResult = `T1 nước = ${this.status.w}°C`;
         } else if (line === 'h 75') {

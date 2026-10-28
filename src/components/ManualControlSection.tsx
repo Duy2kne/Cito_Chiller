@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Wrench,
   Play,
@@ -125,10 +125,33 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
     sendTestSet(p1State, nextP2, nextFan);
   };
 
-  // Change Fan Speed
-  const handleFanChange = (speed: number) => {
+  // Change Fan Speed: keo thanh truot chi gui 1 lenh sau khi dung tay 300 ms
+  // (moi lenh phai cho ack, gui theo tung buoc keo se xep hang dai va tre)
+  const fanTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (fanTimer.current !== null) window.clearTimeout(fanTimer.current);
+  }, []);
+  const handleFanChange = (speed: number, immediate = true) => {
     setFanSpeed(speed);
-    sendTestSet(p1State, p2State, speed);
+    if (fanTimer.current !== null) window.clearTimeout(fanTimer.current);
+    if (immediate) {
+      sendTestSet(p1State, p2State, speed);
+      return;
+    }
+    fanTimer.current = window.setTimeout(() => {
+      fanTimer.current = null;
+      sendTestSet(p1State, p2State, speed);
+    }, 300);
+  };
+
+  // Gia han them 10 phut (firmware: TEST_START khi dang TEST = tinh lai thoi gian)
+  const handleExtend = async () => {
+    if (!isConnected || !isTestActive) return;
+    try {
+      await bleManager.startTest();
+    } catch (e) {
+      console.warn('Failed to extend test mode', e);
+    }
   };
 
   // Quick Presets
@@ -157,12 +180,42 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
     }
   };
 
-  // Real-time currents & RPM
-  const p1Current = status?.p?.[0] ? formatCurrent(status.p[0][4]) : '0 mA';
-  const p2Current = status?.p?.[1] ? formatCurrent(status.p[1][4]) : '0 mA';
+  // Real-time currents & RPM (luon lay so do THAT tu may, ke ca khi da tat - de thay sò ket ON)
+  const p1Current = status?.p?.[0] ? formatCurrent(status.p[0][4]) : '—';
+  const p2Current = status?.p?.[1] ? formatCurrent(status.p[1][4]) : '—';
   const fanMa = status?.f?.ma ?? 0;
   const fanRpm1 = status?.f?.rpm?.[0] ?? 0;
   const fanRpm2 = status?.f?.rpm?.[1] ?? 0;
+  const fanActual = status?.f?.pct ?? 0;
+  const fansOkKnown = status?.f?.ok !== undefined;   // Firmware truoc 28/10/2026 chua gui f.ok
+  const fansOk = (status?.f?.ok ?? 0) === 1;
+
+  // Trang thai THAT cua tung so. Firmware chi bat so khi: so dang duoc phep (pel_en), khong co loi an toan,
+  // 2 quat da dat RPM on dinh, va cach lan bat so truoc >= 10 s -> nut "Bat" chi la YEU CAU.
+  type TecView = { badge: string; tone: 'on' | 'off' | 'wait' | 'warn' | 'err'; note: string };
+  const tecView = (i: 0 | 1, requested: boolean): TecView => {
+    const row = status?.p?.[i];
+    const on = row?.[0] === 1;
+    const bad = row?.[1] === 1;
+    const enabled = row ? row[2] !== 0 : true;
+    const safety = ((status?.err ?? 0) & ~(status?.wrn ?? 0)) !== 0;
+    if (on) return { badge: 'ĐANG CHẠY', tone: 'on', note: '' };
+    if (!requested) return { badge: 'ĐANG TẮT', tone: 'off', note: '' };
+    if (!enabled) return { badge: 'KHÔNG BẬT ĐƯỢC', tone: 'warn', note: 'Sò đang tắt bảo trì (Cài đặt → Cơ bản)' };
+    if (bad || safety) return { badge: 'BỊ CHẶN', tone: 'err', note: 'Máy đang có lỗi bảo vệ – xử lý và xóa lỗi trước' };
+    if (!fansOkKnown) return { badge: 'ĐANG CHỜ', tone: 'wait', note: 'Chờ quạt đạt tốc độ; 2 sò bật cách nhau 10 giây' };
+    if (!fansOk) return { badge: 'CHỜ QUẠT', tone: 'wait', note: 'Sò chỉ bật khi 2 quạt đã đạt tốc độ ổn định (vài giây)' };
+    return { badge: 'SẮP BẬT', tone: 'wait', note: 'Hai sò bật cách nhau 10 giây để tránh sụt nguồn' };
+  };
+  const toneClass: Record<TecView['tone'], string> = {
+    on: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40',
+    off: 'bg-slate-800 text-slate-400',
+    wait: 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse',
+    warn: 'bg-orange-500/20 text-orange-300 border border-orange-500/40',
+    err: 'bg-red-500/20 text-red-300 border border-red-500/40',
+  };
+  const tec1 = tecView(0, p1State);
+  const tec2 = tecView(1, p2State);
 
   return (
     <div className="bg-slate-800/90 border border-slate-700/80 rounded-3xl p-5 shadow-xl space-y-4">
@@ -223,10 +276,21 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
               <Clock className="w-4 h-4 text-purple-400 animate-spin" />
               <span>Thời gian kiểm tra còn lại:</span>
             </div>
-            <span className="font-mono font-bold text-amber-300 text-sm bg-black/40 px-2 py-0.5 rounded border border-amber-500/30">
-              {Math.floor(testSecondsLeft / 60)} phút {testSecondsLeft % 60} giây
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="font-mono font-bold text-amber-300 text-sm bg-black/40 px-2 py-0.5 rounded border border-amber-500/30">
+                {Math.floor(testSecondsLeft / 60)} phút {testSecondsLeft % 60} giây
+              </span>
+              <button
+                onClick={handleExtend}
+                className="px-2 py-0.5 bg-purple-700/60 hover:bg-purple-600 text-purple-100 rounded font-semibold transition cursor-pointer"
+              >
+                +10 phút
+              </button>
+            </div>
           </div>
+          <p className="text-[11px] text-slate-400 -mt-2">
+            Mỗi lần bấm điều khiển, thời gian được tính lại. Hết giờ máy tự về chạy theo nhiệt độ.
+          </p>
 
           {/* Quick Preset Buttons */}
           <div className="space-y-1.5">
@@ -298,9 +362,21 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
               max={100}
               step={5}
               value={fanSpeed}
-              onChange={(e) => handleFanChange(parseInt(e.target.value))}
+              onChange={(e) => handleFanChange(parseInt(e.target.value), false)}
               className="w-full accent-cyan-400 cursor-pointer"
             />
+
+            {/* Trang thai quat THAT: firmware tu nang quat len toi thieu khi co so, tang khi cuc nong nong */}
+            <div className="flex items-center justify-between text-[11px]">
+              <span className={fansOk ? 'text-emerald-400' : fanActual > 0 ? 'text-amber-300' : 'text-slate-400'}>
+                {fanActual === 0 ? 'Quạt đang tắt' : !fansOkKnown ? 'Quạt đang chạy' : fansOk ? '✓ 2 quạt đã đạt tốc độ' : '… Đang chờ quạt đạt tốc độ'}
+              </span>
+              {fanActual !== fanSpeed && (
+                <span className="text-slate-400">
+                  Máy đang chạy <b className="text-cyan-300">{fanActual}%</b>
+                </span>
+              )}
+            </div>
 
             {/* Live Fan Metrics */}
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 text-slate-300 text-center">
@@ -324,7 +400,7 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
             {/* Sò 1 Switch */}
             <div
               className={`p-4 rounded-2xl border transition bg-slate-900/80 flex flex-col justify-between space-y-3 ${
-                p1State
+                tec1.tone === 'on'
                   ? 'border-cyan-500/70 shadow-lg shadow-cyan-950/30'
                   : 'border-slate-700/70'
               }`}
@@ -336,23 +412,15 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
                     Sò Lạnh 1 + Van Nước
                   </span>
                 </div>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    p1State
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                      : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {p1State ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${toneClass[tec1.tone]}`}>
+                  {tec1.badge}
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[11px] text-slate-400 block">Dòng điện đo được:</span>
-                  <span className="font-mono font-bold text-cyan-300 text-sm">
-                    {p1State ? p1Current : '0 mA'}
-                  </span>
+                  <span className="font-mono font-bold text-cyan-300 text-sm">{p1Current}</span>
                 </div>
 
                 <button
@@ -367,15 +435,15 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
                 </button>
               </div>
 
-              <p className="text-[10px] text-slate-400 italic">
-                * Bật Sò 1 sẽ đồng thời kích hoạt van nước mở.
+              <p className={`text-[10px] italic ${tec1.note ? 'text-amber-300' : 'text-slate-400'}`}>
+                {tec1.note || '* Sò 1 chạy thì van nước mở (đấu chung).'}
               </p>
             </div>
 
             {/* Sò 2 Switch */}
             <div
               className={`p-4 rounded-2xl border transition bg-slate-900/80 flex flex-col justify-between space-y-3 ${
-                p2State
+                tec2.tone === 'on'
                   ? 'border-cyan-500/70 shadow-lg shadow-cyan-950/30'
                   : 'border-slate-700/70'
               }`}
@@ -385,23 +453,15 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
                   <Zap className="w-4 h-4 text-cyan-400" />
                   <span className="text-xs font-bold text-slate-200">Sò Lạnh 2</span>
                 </div>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    p2State
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                      : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {p2State ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${toneClass[tec2.tone]}`}>
+                  {tec2.badge}
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[11px] text-slate-400 block">Dòng điện đo được:</span>
-                  <span className="font-mono font-bold text-cyan-300 text-sm">
-                    {p2State ? p2Current : '0 mA'}
-                  </span>
+                  <span className="font-mono font-bold text-cyan-300 text-sm">{p2Current}</span>
                 </div>
 
                 <button
@@ -416,8 +476,8 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
                 </button>
               </div>
 
-              <p className="text-[10px] text-slate-400">
-                * Tầng lạnh tăng cường thứ 2.
+              <p className={`text-[10px] ${tec2.note ? 'text-amber-300 italic' : 'text-slate-400'}`}>
+                {tec2.note || '* Tầng lạnh tăng cường thứ 2.'}
               </p>
             </div>
           </div>
@@ -426,7 +486,8 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
           <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-400 flex items-start space-x-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <span className="leading-relaxed text-[11px]">
-              <strong>Bảo vệ an toàn phần cứng:</strong> Khi bật sò, quạt phải đạt đủ tốc độ gió giải nhiệt máy mới cho phép đóng relay/mosfet sò lạnh để bảo vệ chống nổ sò do quá nhiệt.
+              <strong>Máy vẫn giữ mọi bảo vệ:</strong> sò chỉ bật khi 2 quạt đã đạt tốc độ, 2 sò bật cách nhau 10 giây,
+              có sò chạy thì quạt không thấp hơn mức tối thiểu. Gặp lỗi (quá nhiệt, quá dòng…) máy tự ngắt sò ngay.
             </span>
           </div>
         </div>
@@ -437,7 +498,7 @@ export const ManualControlSection: React.FC<ManualControlSectionProps> = ({
               Chế độ Manual đang TẮT (Máy chạy theo nhiệt độ tự động)
             </span>
             <p className="text-[11px] text-slate-400">
-              Nhấn nút &quot;Bật Chế Độ Manual&quot; để test độc lập quạt gió, van xả nước, và 2 sò lạnh.
+              Nhấn nút &quot;Bật Chế Độ Manual&quot; để thử riêng quạt, sò 1 (+ van nước) và sò 2 trong 10 phút.
             </p>
           </div>
 

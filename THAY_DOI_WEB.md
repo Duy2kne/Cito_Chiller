@@ -19,7 +19,8 @@ Web App điều khiển máy làm lạnh nước bể cá **CITO CHILLER** qua *
 | `src/components/ConnectModal.tsx` | Hộp thoại kết nối Bluetooth, nhập mã PIN, chuyển sang chế độ Demo và hướng dẫn tương thích trình duyệt (Chrome/Edge trên PC & Android, app Bluefy trên iOS). |
 | `src/App.tsx` | Khung ứng dụng chính: thanh header hiển thị trạng thái kết nối + tên máy, hệ thống thông báo toast phản hồi ack, thanh điều hướng 3 tab chân trang. |
 | `src/services/packetParser.test.ts` | Bộ kiểm thử tự động Vitest kiểm tra UTF-8 đa byte bị cắt đôi, xử lý nhiệt độ `null`, định dạng dòng mA/A, kiểm tra bitmask mã lỗi khóa `0x07E8`. |
-| `.github/workflows/deploy.yml` | CI/CD GitHub Actions: tự động build và deploy lên GitHub Pages tĩnh. |
+| `.github/workflows/deploy.yml` | CI/CD GitHub Actions: Tự động cài đặt dependency (`esbuild@0.27.7`), lint, test, build tĩnh với đường dẫn tương đối và tự động deploy lên GitHub Pages. |
+| `vite.config.ts` | Cấu hình Vite với `base: './'` (dùng đường dẫn tương đối cho mọi assets JS/CSS/HTML) giúp ứng dụng chạy được trên mọi subpath GitHub Pages mà không bị lỗi 404. |
 
 ---
 

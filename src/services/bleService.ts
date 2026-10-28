@@ -70,6 +70,10 @@ export class ChillerBleManager {
   >();
   private pinRequiredSubscribers = new Set<(msg?: string) => void>();
 
+  // Gan 1 lan duy nhat: bind() moi lan tao ham moi -> removeEventListener khong go duoc,
+  // noi lai se gan them listener -> moi goi bi xu ly 2 lan, bo dem ghep goi hong.
+  private readonly onValueChanged = (event: Event) => this.handleCharacteristicValueChanged(event);
+
   private constructor() {
     this.handlePacketReceived = this.handlePacketReceived.bind(this);
     this.handleDisconnected = this.handleDisconnected.bind(this);
@@ -216,11 +220,9 @@ export class ChillerBleManager {
 
     // Setup streaming buffer
     this.framingBuffer.reset();
+    this.statusChar.removeEventListener('characteristicvaluechanged', this.onValueChanged);
+    this.statusChar.addEventListener('characteristicvaluechanged', this.onValueChanged);
     await this.statusChar.startNotifications();
-    this.statusChar.addEventListener(
-      'characteristicvaluechanged',
-      this.handleCharacteristicValueChanged.bind(this)
-    );
 
     // Send AUTH immediately
     this.setConnectionState('authenticating', this.deviceName);
@@ -261,13 +263,7 @@ export class ChillerBleManager {
     this.manualDisconnect = true;
     this.clearReconnectTimer();
 
-    if (this.currentPendingAck) {
-      clearTimeout(this.currentPendingAck.timeoutId);
-      this.currentPendingAck.reject(new Error('Đã ngắt kết nối'));
-      this.currentPendingAck = null;
-    }
-    this.commandQueue = [];
-    this.isWriting = false;
+    this.abortPendingCommands();
 
     if (this.demoDevice) {
       this.demoDevice.stop();
@@ -276,10 +272,7 @@ export class ChillerBleManager {
 
     if (this.statusChar) {
       try {
-        this.statusChar.removeEventListener(
-          'characteristicvaluechanged',
-          this.handleCharacteristicValueChanged.bind(this)
-        );
+        this.statusChar.removeEventListener('characteristicvaluechanged', this.onValueChanged);
       } catch (e) {
         console.debug('Failed to remove statusChar listener:', e);
       }
@@ -305,43 +298,55 @@ export class ChillerBleManager {
     this.setConnectionState('disconnected', '');
   }
 
+  // Huy lenh dang cho ack + hang doi (lenh cu khong con y nghia sau khi mat ket noi;
+  // neu giu lai, AUTH luc noi lai phai doi lenh cu het han 5 s)
+  private abortPendingCommands() {
+    if (this.currentPendingAck) {
+      clearTimeout(this.currentPendingAck.timeoutId);
+      this.currentPendingAck.reject(new Error('Đã ngắt kết nối'));
+      this.currentPendingAck = null;
+    }
+    for (const cmd of this.commandQueue) cmd.reject(new Error('Đã ngắt kết nối'));
+    this.commandQueue = [];
+    this.isWriting = false;
+  }
+
   private handleDisconnected() {
     if (this.manualDisconnect) return;
 
     console.warn('Bluetooth disconnected unexpectedly. Attempting reconnection...');
+    this.abortPendingCommands();
     this.setConnectionState('reconnecting', this.deviceName);
+    this.reconnectAttempt = 0;
+    this.scheduleReconnect();
+  }
 
-    // Auto-reconnect up to 3 times (delays 2s, 4s, 6s)
-    if (this.reconnectAttempt < 3 && this.bluetoothDevice) {
-      this.reconnectAttempt += 1;
-      const delay = this.reconnectAttempt * 2000;
-      this.notifyToast(
-        'info',
-        `Mất sóng, đang kết nối lại lần ${this.reconnectAttempt}/3...`
-      );
-
-      this.reconnectTimer = window.setTimeout(async () => {
-        try {
-          if (this.bluetoothDevice) {
-            await this.establishGattConnection(this.bluetoothDevice);
-            this.reconnectAttempt = 0;
-            this.notifyToast('success', 'Đã kết nối lại máy làm lạnh!');
-          }
-        } catch (e) {
-          console.warn(`Reconnect attempt ${this.reconnectAttempt} failed`, e);
-          if (this.reconnectAttempt >= 3) {
-            this.setConnectionState('disconnected', this.deviceName);
-            this.notifyToast(
-              'error',
-              'Không thể tự kết nối lại. Bấm nút Kết nối để thử lại.'
-            );
-          }
-        }
-      }, delay);
-    } else {
+  // Tu noi lai toi da 3 lan (cho 2 s, 4 s, 6 s). Lan noi that bai khong ban lai su kien
+  // 'gattserverdisconnected' -> phai tu hen lan ke tiep o day (vd may dang khoi dong lai sau REBOOT / nap firmware).
+  private scheduleReconnect() {
+    if (this.manualDisconnect || !this.bluetoothDevice) return;
+    if (this.reconnectAttempt >= 3) {
       this.setConnectionState('disconnected', this.deviceName);
-      this.notifyToast('error', 'Đã ngắt kết nối với máy.');
+      this.notifyToast('error', 'Không thể tự kết nối lại. Bấm nút Kết nối để thử lại.');
+      return;
     }
+    this.reconnectAttempt += 1;
+    const delay = this.reconnectAttempt * 2000;
+    this.notifyToast('info', `Mất sóng, đang kết nối lại lần ${this.reconnectAttempt}/3...`);
+
+    this.reconnectTimer = window.setTimeout(async () => {
+      this.reconnectTimer = null;
+      if (this.manualDisconnect || !this.bluetoothDevice) return;
+      try {
+        await this.establishGattConnection(this.bluetoothDevice);
+        this.reconnectAttempt = 0;
+        this.notifyToast('success', 'Đã kết nối lại máy làm lạnh!');
+      } catch (e) {
+        console.warn(`Reconnect attempt ${this.reconnectAttempt} failed`, e);
+        this.setConnectionState('reconnecting', this.deviceName);
+        this.scheduleReconnect();
+      }
+    }, delay);
   }
 
   private clearReconnectTimer() {
@@ -378,7 +383,9 @@ export class ChillerBleManager {
           }
         } else {
           if (pkt.ok) {
-            this.notifyToast('success', pkt.msg || `Lệnh ${pkt.a} thành công`);
+            // Firmware chi gui msg cho thao tac can bao (luu, bat/tat...). TEST_SET khong co msg
+            // -> khong hien toast moi lan bam / keo trong dieu khien thu cong.
+            if (pkt.msg) this.notifyToast('success', pkt.msg);
           } else {
             this.notifyToast('error', pkt.msg || `Lệnh ${pkt.a} bị từ chối`);
           }

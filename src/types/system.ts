@@ -120,7 +120,29 @@ export interface PacketWifiList {
   err?: string;
 }
 
-export type AnyPacket = PacketStatus | PacketConfig | PacketAck | PacketWifiList;
+// Nhat ky: 1 su kien = [t, type, src, val] (xem history.h firmware, src/services/history.ts)
+export type HistoryTuple = [number, number, number, number];
+
+export interface PacketHistory {
+  t: 'hi'; // Danh sach nhat ky, MOI NHAT truoc, gui nhieu trang
+  clr: boolean; // Trang dau -> xoa danh sach cu
+  end: boolean; // Trang cuoi
+  max?: number; // So su kien toi da may luu (100)
+  e: HistoryTuple[];
+}
+
+export interface PacketHistoryEvent {
+  t: 'ev'; // Su kien moi trong luc dang ket noi, CU -> MOI
+  e: HistoryTuple[];
+}
+
+export type AnyPacket =
+  | PacketStatus
+  | PacketConfig
+  | PacketAck
+  | PacketWifiList
+  | PacketHistory
+  | PacketHistoryEvent;
 
 // Error definition
 export interface ErrorInfo {

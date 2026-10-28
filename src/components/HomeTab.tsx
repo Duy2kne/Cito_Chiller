@@ -158,7 +158,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const stateInfo = getStateDetails(
     status?.st ?? 0,
     status?.ph ?? 'OFF',
-    status?.err ?? 0,
+    (status?.err ?? 0) & ~(status?.wrn ?? 0),   // Chi canh bao (wrn) thi may van chay -> khong bao "LOI"
     status?.stg ?? 0,
     status?.pw ?? 0
   );

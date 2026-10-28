@@ -38,6 +38,16 @@ describe('parseErrors', () => {
     expect(res.hasLockedErrors).toBe(false);
   });
 
+  it('treats bits present in BOTH err and wrn as warning-only (firmware: wrn is a subset of err)', () => {
+    // Firmware gui E2 canh bao: err = E2 | E7, wrn = E2 -> E2 chi canh bao, E7 la loi khoa
+    const res = parseErrors((1 << 1) | (1 << 6), 1 << 1);
+    expect(res.activeErrors.map((e) => e.code)).toEqual(['E2', 'E7']);
+    expect(res.activeErrors[0].isWarningOnly).toBe(true);
+    expect(res.activeErrors[1].isWarningOnly).toBe(false);
+    expect(res.hasWarningOnly).toBe(true);
+    expect(res.hasLockedErrors).toBe(true);
+  });
+
   it('identifies locked errors like E4 (heatsink overheat) and E6 (fan 1 stall)', () => {
     // E4 is bit 3 (1 << 3 = 8), E6 is bit 5 (1 << 5 = 32)
     const errMask = (1 << 3) | (1 << 5);

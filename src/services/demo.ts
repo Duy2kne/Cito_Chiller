@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AnyPacket, ChillerConfig, ChillerStatus } from '../types/system';
+import { AnyPacket, ChillerConfig, ChillerStatus, HistoryTuple } from '../types/system';
+import { EV, HISTORY_MAX, TIME_UPTIME, localEpochNow } from './history';
 
 export class DemoChillerDevice {
   private timer: number | null = null;
@@ -106,6 +107,71 @@ export class DemoChillerDevice {
 
   private cooldownTimer: number = 0;
 
+  // ---- Nhat ky gia (giong history.cpp): moi nhat truoc, toi da HISTORY_MAX ----
+  private history: HistoryTuple[] = [];
+
+  private seedHistory() {
+    const now = localEpochNow();
+    const H = 3600;
+    const ev = (ago: number, type: number, src: number, val: number): HistoryTuple => [now - ago, type, src, val];
+    this.history = [
+      ev(20 * 60, EV.COOL_RUN, 2, 1260),
+      ev(55 * 60, EV.SETPOINT, 3, 200),
+      ev(2 * H, EV.COOL_RUN, 1, 840),
+      ev(3 * H, EV.HOT_REDUCE, 0, 562),
+      ev(3 * H + 600, EV.ERR_CLEAR, 1, 1 << 5),
+      ev(3 * H + 900, EV.ERR_SET, 4, 1 << 5),
+      ev(5 * H, EV.FAN_MODE, 2, 1),
+      ev(9 * H, EV.COOL_RUN, 2, 2710),
+      ev(26 * H, EV.WIFI_UP, 0, 58),
+      ev(26 * H + 30, EV.BOOT, 1, 2 << 10),
+      [TIME_UPTIME | 7200, EV.COOL_RUN, 1, 600],      // Lan chay truoc: app chua ket noi -> chua co gio
+      [TIME_UPTIME | 3, EV.BOOT, 9, 2 << 10],
+    ];
+  }
+
+  private sendHistory() {
+    const PAGE = 12;
+    const n = Math.max(1, Math.ceil(this.history.length / PAGE));
+    for (let i = 0; i < n; i++) {
+      this.sendPacket({
+        t: 'hi',
+        clr: i === 0,
+        end: i === n - 1,
+        max: HISTORY_MAX,
+        e: this.history.slice(i * PAGE, (i + 1) * PAGE),
+      });
+    }
+  }
+
+  private addEvent(type: number, src: number, val: number) {
+    const e: HistoryTuple = [localEpochNow(), type, src, val & 0xffff];
+    this.history = [e, ...this.history].slice(0, HISTORY_MAX);   // Day -> bo cai cu nhat
+    if (this.isAuthenticated) this.sendPacket({ t: 'ev', e: [e] });
+  }
+
+  // Ghi su kien bang cach so trang thai truoc / sau lenh (giong hist_update cua firmware)
+  private logChanges(a: string, b: { pw: number; err: number; test: number; cfg: ChillerConfig }) {
+    const cur = this.config as unknown as Record<string, unknown>;
+    const old = b.cfg as unknown as Record<string, unknown>;
+    if (this.status.pw !== b.pw) this.addEvent(EV.POWER, 3, this.status.pw);
+    if (this.config.set !== b.cfg.set) this.addEvent(EV.SETPOINT, 3, Math.round(this.config.set * 10));
+    if (this.config.mode !== b.cfg.mode) this.addEvent(EV.FAN_MODE, 3, this.config.mode);
+    if (this.status.tst.on !== b.test) this.addEvent(EV.TEST, 3, this.status.tst.on);
+    if (['z_f', 'z_p1', 'z_p2'].some((k) => cur[k] !== old[k])) this.addEvent(EV.ACS_ZERO, 3, 0);
+    if (a === 'DEFAULTS') {
+      this.addEvent(EV.DEFAULTS, 3, 0);
+    } else {
+      const skip = new Set(['set', 'mode', 'fw', 'dev', 'ssid', 'rst', 'pend', 'ap', 'z_f', 'z_p1', 'z_p2']);
+      const other = Object.keys(cur).filter((k) => !skip.has(k) && cur[k] !== old[k]).length;
+      if (other) this.addEvent(EV.SETTINGS, 3, other);
+    }
+    const set = this.status.err & ~b.err;
+    const clr = b.err & ~this.status.err;
+    if (set) this.addEvent(EV.ERR_SET, 4, set);
+    if (clr) this.addEvent(EV.ERR_CLEAR, 3, clr);
+  }
+
   // TEST giong firmware (_update_test trong chiller.cpp): so chi bat khi 2 quat da dat RPM on dinh
   // (~1 s kick + 3 s xac nhan), 2 so bat cach nhau 10 s, co so thi quat >= fan_min.
   private testFanOnSec: number = 0;
@@ -152,6 +218,7 @@ export class DemoChillerDevice {
 
   constructor(onPacket: (packet: AnyPacket) => void) {
     this.onPacketCallback = onPacket;
+    this.seedHistory();
   }
 
   public setPacketHandler(onPacket: (packet: AnyPacket) => void) {
@@ -192,6 +259,7 @@ export class DemoChillerDevice {
         this.status.tst.left -= 1;
         if (this.status.tst.left === 0) {
           this.stopTestState();
+          this.addEvent(EV.TEST, 5, 0);
         }
       }
       this.sendPacket({ ...this.status, t: 'st' });
@@ -321,6 +389,35 @@ export class DemoChillerDevice {
 
   // Handle command from web
   public handleCommand(cmdObj: { a: string; p?: Record<string, unknown> }): void {
+    const { a } = cmdObj;
+    if (this.isAuthenticated) {
+      if (a === 'GET_HISTORY') {
+        this.sendPacket({ t: 'ack', a, ok: true });
+        this.sendHistory();
+        return;
+      }
+      if (a === 'CLEAR_HISTORY') {
+        this.history = [];
+        this.sendPacket({ t: 'ack', a, ok: true, msg: 'Đã xóa nhật ký' });
+        this.sendHistory();
+        return;
+      }
+      if (a === 'TIME_SET') {
+        this.sendPacket({ t: 'ack', a, ok: true });
+        return;
+      }
+    }
+    const wasAuth = this.isAuthenticated;
+    const before = { pw: this.status.pw, err: this.status.err, test: this.status.tst.on, cfg: { ...this.config } };
+    this.handleCommandInner(cmdObj);
+    if (!wasAuth) {
+      if (this.isAuthenticated) this.sendHistory();     // Giong may: dung PIN -> gui nhat ky
+      return;
+    }
+    this.logChanges(a, before);
+  }
+
+  private handleCommandInner(cmdObj: { a: string; p?: Record<string, unknown> }): void {
     const { a, p = {} } = cmdObj;
 
     if (a === 'AUTH') {

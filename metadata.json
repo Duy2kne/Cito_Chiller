@@ -1,0 +1,6 @@
+{
+  "name": "CITO CHILLER",
+  "description": "Web Bluetooth app to control CITO aquarium water chiller with real-time temperature, dual TEC monitoring, fan control, and diagnostics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

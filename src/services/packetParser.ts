@@ -4,6 +4,7 @@
  */
 
 import { AnyPacket, ChillerConfig, ChillerStatus, PacketAck } from '../types/system';
+import { HISTORY_MAX, HistoryEvent, fromTuple, prependEvents } from './history';
 
 export interface AppState {
   status: ChillerStatus | null;
@@ -11,6 +12,9 @@ export interface AppState {
   lastAck: PacketAck | null;
   wifiList: [string, number, number][];
   wifiScanError: string | null;
+  history: HistoryEvent[]; // Nhat ky, MOI NHAT truoc, toi da historyMax (= so may luu)
+  historyMax: number;
+  historyLoading: boolean; // Dang nhan cac trang 'hi'
 }
 
 export const INITIAL_APP_STATE: AppState = {
@@ -19,6 +23,9 @@ export const INITIAL_APP_STATE: AppState = {
   lastAck: null,
   wifiList: [],
   wifiScanError: null,
+  history: [],
+  historyMax: HISTORY_MAX,
+  historyLoading: false,
 };
 
 /**
@@ -51,6 +58,18 @@ export function applyPacket(prev: AppState, pkt: AnyPacket): AppState {
         ...prev,
         lastAck: pkt,
       };
+    }
+    case 'hi': {
+      // Nhieu trang, moi nhat truoc. Trang dau (clr) thay ca danh sach.
+      const max = Math.min(pkt.max || HISTORY_MAX, 500);
+      const page = (Array.isArray(pkt.e) ? pkt.e : []).map(fromTuple);
+      const list = (pkt.clr ? page : [...prev.history, ...page]).slice(0, max);
+      return { ...prev, history: list, historyMax: max, historyLoading: !pkt.end };
+    }
+    case 'ev': {
+      // Su kien moi phat sinh, may gui cu -> moi
+      const fresh = (Array.isArray(pkt.e) ? pkt.e : []).map(fromTuple);
+      return { ...prev, history: prependEvents(prev.history, fresh, prev.historyMax) };
     }
     case 'wl': {
       return {

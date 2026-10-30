@@ -35,6 +35,8 @@ export const EV = {
   WIFI_UP: 13,
   OTA: 14,
   TIME_SET: 15,
+  ERR_SET_HI: 16, // Nhu ERR_SET cho E17..E32 (val bit b = E(b+17))
+  ERR_CLEAR_HI: 17,
 } as const;
 
 export type HistoryCategory = 'cool' | 'error' | 'control' | 'system';
@@ -93,12 +95,14 @@ export function formatDuration(sec: number): string {
   return `${s} giây`;
 }
 
-function errorList(mask: number): string {
+// mask 16 bit cua 1 su kien; base = 0 (E1..E16) hoac 16 (E17..E32, su kien *_HI)
+function errorList(mask: number, base = 0): string {
   const out: string[] = [];
-  for (let b = 0; b < 12; b++) {
+  for (let b = 0; b < 16; b++) {
     if (mask & (1 << b)) {
-      const d = ERROR_DEFINITIONS[b + 1];
-      out.push(d ? `${d.code} ${d.name}` : `E${b + 1}`);
+      const n = base + b + 1;
+      const d = ERROR_DEFINITIONS[n];
+      out.push(d ? `${d.code} ${d.name}` : `E${n}`);
     }
   }
   return out.join(', ');
@@ -111,6 +115,8 @@ export function eventCategory(e: HistoryEvent): HistoryCategory {
       return 'cool';
     case EV.ERR_SET:
     case EV.ERR_CLEAR:
+    case EV.ERR_SET_HI:
+    case EV.ERR_CLEAR_HI:
       return 'error';
     case EV.POWER:
     case EV.SETPOINT:
@@ -127,12 +133,14 @@ export function eventCategory(e: HistoryEvent): HistoryCategory {
 
 /** Su kien can de y (to do): loi, may bi treo / sut nguon. */
 export function isAlarmEvent(e: HistoryEvent): boolean {
-  return e.type === EV.ERR_SET || (e.type === EV.BOOT && [4, 5, 6, 7, 9].includes(e.src));
+  return e.type === EV.ERR_SET || e.type === EV.ERR_SET_HI || (e.type === EV.BOOT && [4, 5, 6, 7, 9].includes(e.src));
 }
 
 /** Ai / cai gi gay ra (chi voi su kien co nguon). '' = khong hien. */
 export function eventSource(e: HistoryEvent): string {
-  if (e.type === EV.BOOT || e.type === EV.COOL_RUN || e.type === EV.HOT_REDUCE || e.type === EV.ERR_SET) return '';
+  if (e.type === EV.BOOT || e.type === EV.COOL_RUN || e.type === EV.HOT_REDUCE || e.type === EV.ERR_SET ||
+      e.type === EV.ERR_SET_HI)
+    return '';
   return SRC_LABEL[e.src] ?? '';
 }
 
@@ -154,6 +162,10 @@ export function describeEvent(e: HistoryEvent): string {
       return `Lỗi: ${errorList(e.val)}`;
     case EV.ERR_CLEAR:
       return `Hết lỗi: ${errorList(e.val)}`;
+    case EV.ERR_SET_HI:
+      return `Lỗi: ${errorList(e.val, 16)}`;
+    case EV.ERR_CLEAR_HI:
+      return `Hết lỗi: ${errorList(e.val, 16)}`;
     case EV.HOT_REDUCE:
       return `Cục nóng ${(e.val / 10).toFixed(1)} °C – giảm còn 1 sò`;
     case EV.TEST:

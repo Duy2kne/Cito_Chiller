@@ -19,7 +19,7 @@ import {
   Minus,
   Sparkles,
 } from 'lucide-react';
-import { ChillerConfig, ChillerStatus, formatCurrent, getStateDetails, parseErrors } from '../types/system';
+import { ChillerConfig, ChillerStatus, formatCurrent, formatEnergy, getStateDetails, parseErrors } from '../types/system';
 import { bleManager } from '../services/bleService';
 import { ManualControlSection } from './ManualControlSection';
 
@@ -596,7 +596,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-3">
             <div className="text-[10px] uppercase tracking-wider text-slate-400">Điện tháng này</div>
             <div className="text-2xl font-bold font-mono text-emerald-400 mt-0.5">
-              {!isConnected || status?.kwh === undefined ? '—' : `${status.kwh.toFixed(1)} kWh`}
+              {!isConnected || status?.kwh === undefined ? '—' : formatEnergy(status.kwh)}
             </div>
             <div className="text-[10px] text-slate-400 mt-1">
               {isConnected && status?.kwh === undefined

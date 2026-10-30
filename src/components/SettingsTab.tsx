@@ -94,7 +94,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
 
   const basicKeys: (keyof ChillerConfig)[] = ['diff', 'bz_key', 'bz_alarm', 'pel1_en', 'pel2_en'];
   const tecKeys: (keyof ChillerConfig)[] = ['s2on', 's2off', 'min_on', 'min_off', 'med_tec'];
-  const tempKeys: (keyof ChillerConfig)[] = ['hot_red', 'hot_max', 'hot_clr', 'cold_min'];
+  const tempKeys: (keyof ChillerConfig)[] = ['hot_red', 'hot_max', 'hot_clr', 'cold_min', 'flow_dt'];
   const fanKeys: (keyof ChillerConfig)[] = [
     'fan_lo',
     'fan_hi',
@@ -408,7 +408,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
                   <label className="text-slate-300 font-medium block">
                     Ngắt quá nhiệt T3 (hot_max):
                   </label>
-                  <span className="text-[10px] text-slate-400">T3/T4 ≥ mức này ngắt máy báo lỗi E4 (40–90°C)</span>
+                  <span className="text-[10px] text-slate-400">T3/T4 ≥ mức này dừng hẳn sò, báo lỗi E4 (40–90°C, mặc định 75)</span>
                   <input
                     type="number"
                     value={formData.hot_max ?? config?.hot_max ?? 75}
@@ -437,9 +437,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
                   <span className="text-[10px] text-slate-400">T2 block ≤ mức này ngắt báo E5 (-10–15°C)</span>
                   <input
                     type="number"
-                    value={formData.cold_min ?? config?.cold_min ?? 5}
+                    value={formData.cold_min ?? config?.cold_min ?? 1}
                     onChange={(e) => handleChange('cold_min', parseInt(e.target.value))}
                     className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono"
+                  />
+                </div>
+
+                <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                  <label className="text-slate-300 font-medium block">
+                    Phát hiện không có nước (flow_dt):
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Block lạnh hơn nước ≥ mức này khi sò chạy → lỗi E13 (5–30°C, mặc định 12)
+                  </span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    disabled={config?.flow_dt === undefined}
+                    title={config?.flow_dt === undefined ? 'Cần nạp firmware mới' : undefined}
+                    value={formData.flow_dt ?? config?.flow_dt ?? 12}
+                    onChange={(e) => handleChange('flow_dt', parseFloat(e.target.value))}
+                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono disabled:opacity-40"
                   />
                 </div>
               </div>
@@ -461,6 +479,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                  <label className="text-slate-300 font-medium block">
+                    Quạt giải nhiệt khi tắt (fan_off):
+                  </label>
+                  <span className="text-[10px] text-slate-400">Sò tắt / tắt máy mà cục nóng &gt; mức này: quạt vẫn chạy tới khi nguội (°C, mặc định 45)</span>
+                  <input
+                    type="number"
+                    value={formData.fan_off ?? config?.fan_off ?? 45}
+                    onChange={(e) => handleChange('fan_off', parseInt(e.target.value))}
+                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono"
+                  />
+                </div>
+
                 <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
                   <label className="text-slate-300 font-medium block">
                     Quạt chạy thêm khi dừng (fan_runon):

@@ -8,8 +8,10 @@ export interface ChillerStatus {
   w: number | null; // T1 Water temp (°C) - null = sensor error
   c: number | null; // T2 Cold block temp (°C) - null = sensor error
   h: number | null; // T3 Hot heatsink temp (°C) - null = sensor error
-  h2?: number | null; // T4 Hot heatsink 2 (°C) - absent = not fitted, null = sensor error
+  h2?: number | null; // T4 Hot heatsink 2 (°C) - null = sensor error, absent = older firmware
   kwh?: number; // Energy used this month (kWh), counted by the machine
+  wt?: number; // Total power now (W) = measured current x nominal voltage (fan + 2 TECs)
+  vn?: number; // Nominal supply voltage used for the power estimate (V)
   set: number; // Target temperature (°C)
   pw: number; // 0 = OFF, 1 = ON (Cooling power)
   fm: number; // Fan mode: 0: Auto, 1: Medium (Êm), 2: Emergency (Mạnh)
@@ -84,6 +86,7 @@ export interface ChillerConfig {
   off_w: number; // -10 - 10 °C: Calibration offset for T1 water
   off_c: number; // -10 - 10 °C: Calibration offset for T2 cold block
   off_h: number; // -10 - 10 °C: Calibration offset for T3 hot heatsink
+  off_h2?: number; // -10 - 10 °C: Calibration offset for T4 hot heatsink 2 (absent = older firmware)
   z_f: number; // 1.17 - 2.17 V: ACS712 0A voltage for fan
   z_p1: number; // 1.17 - 2.17 V: ACS712 0A voltage for TEC1
   z_p2: number; // 1.17 - 2.17 V: ACS712 0A voltage for TEC2

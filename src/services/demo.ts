@@ -17,6 +17,7 @@ export class DemoChillerDevice {
     w: 25.4,
     c: 24.1,
     h: 31.2,
+    kwh: 12.8,
     set: 20.0,
     pw: 1,
     fm: 0, // Auto
@@ -158,11 +159,11 @@ export class DemoChillerDevice {
     if (this.config.set !== b.cfg.set) this.addEvent(EV.SETPOINT, 3, Math.round(this.config.set * 10));
     if (this.config.mode !== b.cfg.mode) this.addEvent(EV.FAN_MODE, 3, this.config.mode);
     if (this.status.tst.on !== b.test) this.addEvent(EV.TEST, 3, this.status.tst.on);
-    if (['z_f', 'z_p1', 'z_p2'].some((k) => cur[k] !== old[k])) this.addEvent(EV.ACS_ZERO, 3, 0);
     if (a === 'DEFAULTS') {
       this.addEvent(EV.DEFAULTS, 3, 0);
     } else {
       const skip = new Set(['set', 'mode', 'fw', 'dev', 'ssid', 'rst', 'pend', 'ap', 'z_f', 'z_p1', 'z_p2']);
+      if (a === 'ACS_CAL') ['k_f', 'k_p1', 'k_p2'].forEach((k) => skip.add(k));   // Da ghi rieng EV_ACS_ZERO
       const other = Object.keys(cur).filter((k) => !skip.has(k) && cur[k] !== old[k]).length;
       if (other) this.addEvent(EV.SETTINGS, 3, other);
     }
@@ -241,6 +242,12 @@ export class DemoChillerDevice {
   }
 
   private sendPacket(packet: AnyPacket) {
+    if (packet.t === 'st') {
+      // Demo: may co lap T4 (cuc nong 2), chay thap hon T3 ~1.2 °C
+      const h = this.status.h;
+      this.status.h2 = h === null ? null : +(h - 1.2).toFixed(1);
+      packet = { ...packet, h2: this.status.h2 };
+    }
     if (this.onPacketCallback) {
       this.onPacketCallback(packet);
     }
@@ -565,19 +572,36 @@ export class DemoChillerDevice {
         break;
       }
       case 'ACS_ZERO': {
-        if (this.status.p[0][0] || this.status.p[1][0] || this.status.f.pct > 0) {
-          this.sendPacket({
-            t: 'ack',
-            a: 'ACS_ZERO',
-            ok: false,
-            msg: 'Từ chối: Quạt hoặc sò đang chạy! Hãy tắt làm lạnh trước.',
-          });
+        // Giong firmware: dang co tai -> tu tat het ~2.5 s, do xong tra lai; ack gui khi do xong
+        window.setTimeout(() => {
+          this.config.z_f = 1.652;
+          this.config.z_p1 = 1.648;
+          this.config.z_p2 = 1.651;
+          this.sendPacket({ t: 'ack', a: 'ACS_ZERO', ok: true, msg: 'Đã đo điểm 0 A cho 3 cảm biến dòng' });
+          this.addEvent(EV.ACS_ZERO, 3, 0);
+          this.sendPacket({ ...this.config, t: 'cf' });
+        }, 2500);
+        break;
+      }
+      case 'ACS_CAL': {
+        // k_moi = k_cu x dong_doc / dong_ampe_kim (giong cur_cal_gain)
+        const ch = Number(p.ch);
+        const trueMa = Number(p.ma);
+        const keys = ['k_f', 'k_p1', 'k_p2'] as const;
+        const readMa = ch === 0 ? this.status.f.ma : this.status.p[ch - 1]?.[4] ?? 0;
+        let msg = '';
+        if (!(ch >= 0 && ch <= 2)) msg = 'Giá trị không hợp lệ';
+        else if (trueMa < 300) msg = 'Dòng ampe kìm quá nhỏ (cần ≥ 0.3 A)';
+        else if (readMa < 300) msg = 'Kênh này đang gần 0 A - bật tải lên trước (mục Điều khiển thủ công)';
+        if (msg) {
+          this.sendPacket({ t: 'ack', a: 'ACS_CAL', ok: false, msg });
           return;
         }
-        this.config.z_f = 1.652;
-        this.config.z_p1 = 1.648;
-        this.config.z_p2 = 1.651;
-        this.sendPacket({ t: 'ack', a: 'ACS_ZERO', ok: true, msg: 'Đã đo và lưu điểm 0 A cho 3 cảm biến' });
+        const key = keys[ch];
+        const k = +((this.config[key] * readMa) / trueMa).toFixed(1);
+        this.config[key] = Math.min(207, Math.max(33, k));
+        this.sendPacket({ t: 'ack', a: 'ACS_CAL', ok: true, msg: 'Đã hiệu chỉnh hệ số' });
+        this.addEvent(EV.ACS_ZERO, 3, 11 + ch);
         this.sendPacket({ ...this.config, t: 'cf' });
         break;
       }

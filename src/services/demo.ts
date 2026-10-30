@@ -18,6 +18,7 @@ export class DemoChillerDevice {
     c: 24.1,
     h: 31.2,
     kwh: 12.8,
+    tk: 1,
     set: 20.0,
     pw: 1,
     fm: 0, // Auto

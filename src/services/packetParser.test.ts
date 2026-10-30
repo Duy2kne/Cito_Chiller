@@ -68,7 +68,7 @@ describe('parseErrors', () => {
     expect(LOCKED_ERRORS_BITMASK).toBe(0x37e8);
   });
 
-  it('error table E1..E19 is consistent with the locked mask and has customer steps', () => {
+  it('error table E1..E18 is consistent with the locked mask and has customer steps', () => {
     for (let n = 1; n <= ERROR_COUNT; n++) {
       const d = ERROR_DEFINITIONS[n];
       expect(d, `E${n}`).toBeDefined();

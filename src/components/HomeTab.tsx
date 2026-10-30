@@ -626,7 +626,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       )}
 
       {/* Secondary Heatsink & Cold Block Temperature Pills (Discreet at bottom) */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 flex items-center justify-around text-xs text-slate-400">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 flex flex-wrap items-center justify-around gap-y-2 text-xs text-slate-400">
         <div className="flex items-center space-x-2">
           <Thermometer className="w-4 h-4 text-cyan-400" />
           <span>
@@ -662,6 +662,41 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             </strong>
           </span>
         </div>
+
+        {/* T4: firmware only sends h2 once the second heatsink sensor is fitted */}
+        {isConnected && status?.h2 !== undefined && (
+          <>
+            <div className="w-px h-4 bg-slate-800" />
+            <div className="flex items-center space-x-2">
+              <Thermometer className="w-4 h-4 text-amber-400" />
+              <span>
+                T4 Cục nóng 2:{' '}
+                <strong
+                  className={`font-mono ${
+                    (status.h2 ?? 0) >= (config?.hot_red ?? 65)
+                      ? 'text-red-400 font-bold'
+                      : 'text-slate-200'
+                  }`}
+                >
+                  {status.h2 === null ? 'Lỗi' : `${status.h2.toFixed(1)} °C`}
+                </strong>
+              </span>
+            </div>
+          </>
+        )}
+
+        {isConnected && status?.kwh !== undefined && (
+          <>
+            <div className="w-px h-4 bg-slate-800" />
+            <div className="flex items-center space-x-2">
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <span>
+                Điện tháng này:{' '}
+                <strong className="text-slate-200 font-mono">{status.kwh.toFixed(1)} kWh</strong>
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Power Off Confirmation Modal */}

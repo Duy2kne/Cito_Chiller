@@ -194,6 +194,14 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const fanRpm1 = status?.f?.rpm?.[0] ?? 0;
   const fanRpm2 = status?.f?.rpm?.[1] ?? 0;
   const fanMa = status?.f?.ma ?? 0;
+
+  // Cong suat: dong do duoc x dien ap danh dinh (may gui "vn", mac dinh 12 V)
+  const supplyV = status?.vn ?? 12;
+  const wattOf = (ma: number) => (ma * supplyV) / 1000;
+  const tec1W = wattOf(tec1?.[4] ?? 0);
+  const tec2W = wattOf(tec2?.[4] ?? 0);
+  const fanW = wattOf(fanMa);
+  const totalW = status?.wt ?? tec1W + tec2W + fanW;
   const fanBad1 = status?.f?.bad?.[0] === 1;
   const fanBad2 = status?.f?.bad?.[1] === 1;
 
@@ -555,6 +563,45 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         </div>
       </div>
 
+      {/* Power now + energy this month */}
+      <div className="p-4 rounded-2xl border border-slate-700/80 bg-slate-800/80">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            Công Suất Điện
+          </span>
+          <span className="text-[10px] text-slate-400 text-right">
+            Ước tính: dòng đo × {supplyV.toFixed(0)} V
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400">Đang tiêu thụ</div>
+            <div className="text-2xl font-bold font-mono text-white mt-0.5">
+              {isConnected ? `${Math.round(totalW)} W` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-400 font-mono mt-1">
+              {isConnected
+                ? `Sò 1: ${Math.round(tec1W)} W · Sò 2: ${Math.round(tec2W)} W · Quạt: ${Math.round(fanW)} W`
+                : 'Sò 1 · Sò 2 · Quạt'}
+            </div>
+          </div>
+
+          <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400">Điện tháng này</div>
+            <div className="text-2xl font-bold font-mono text-emerald-400 mt-0.5">
+              {!isConnected || status?.kwh === undefined ? '—' : `${status.kwh.toFixed(1)} kWh`}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">
+              {isConnected && status?.kwh === undefined
+                ? 'Cần nạp firmware mới để đếm điện năng'
+                : 'Máy tự đếm, sang tháng mới đếm lại từ 0'}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Manual Control Section for direct manual testing */}
       <ManualControlSection
         status={status}
@@ -663,40 +710,28 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           </span>
         </div>
 
-        {/* T4: firmware only sends h2 once the second heatsink sensor is fitted */}
-        {isConnected && status?.h2 !== undefined && (
-          <>
-            <div className="w-px h-4 bg-slate-800" />
-            <div className="flex items-center space-x-2">
-              <Thermometer className="w-4 h-4 text-amber-400" />
-              <span>
-                T4 Cục nóng 2:{' '}
-                <strong
-                  className={`font-mono ${
-                    (status.h2 ?? 0) >= (config?.hot_red ?? 65)
-                      ? 'text-red-400 font-bold'
-                      : 'text-slate-200'
-                  }`}
-                >
-                  {status.h2 === null ? 'Lỗi' : `${status.h2.toFixed(1)} °C`}
-                </strong>
-              </span>
-            </div>
-          </>
-        )}
+        <div className="w-px h-4 bg-slate-800" />
 
-        {isConnected && status?.kwh !== undefined && (
-          <>
-            <div className="w-px h-4 bg-slate-800" />
-            <div className="flex items-center space-x-2">
-              <Zap className="w-4 h-4 text-emerald-400" />
-              <span>
-                Điện tháng này:{' '}
-                <strong className="text-slate-200 font-mono">{status.kwh.toFixed(1)} kWh</strong>
-              </span>
-            </div>
-          </>
-        )}
+        <div className="flex items-center space-x-2">
+          <Thermometer className="w-4 h-4 text-amber-400" />
+          <span>
+            T4 Cục nóng 2:{' '}
+            <strong
+              className={`font-mono ${
+                (status?.h2 ?? 0) >= (config?.hot_red ?? 65)
+                  ? 'text-red-400 font-bold'
+                  : 'text-slate-200'
+              }`}
+            >
+              {!isConnected || status?.h2 === undefined
+                ? '—'
+                : status.h2 === null
+                ? 'Lỗi'
+                : `${status.h2.toFixed(1)} °C`}
+            </strong>
+          </span>
+        </div>
+
       </div>
 
       {/* Power Off Confirmation Modal */}

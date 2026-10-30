@@ -204,6 +204,20 @@ export function formatEventTime(e: HistoryEvent): string {
 }
 
 /** Gio dia phuong cua dien thoai (giay tu 1970, da cong mui gio) cho lenh TIME_SET. */
+export const TIME_RETRY_MS = 10000; // May chua co gio: gui lai toi da 1 lan / 10 s
+export const TIME_RESYNC_MS = 30 * 60 * 1000; // Da co gio: dong bo lai moi 30 phut
+
+/**
+ * Co can gui TIME_SET khong, theo co tk trong goi trang thai (may khong co dong ho):
+ * tk = 0 (vua mat dien / lenh truoc bi lo) -> gui ngay (toi da 1 lan / TIME_RETRY_MS);
+ * tk = 1 -> dong bo lai moi TIME_RESYNC_MS; khong co tk (firmware cu) -> khong.
+ */
+export function timeSyncDue(tk: number | undefined, lastSyncMs: number, nowMs: number): boolean {
+  if (tk === 0) return nowMs - lastSyncMs >= TIME_RETRY_MS;
+  if (tk === 1) return nowMs - lastSyncMs >= TIME_RESYNC_MS;
+  return false;
+}
+
 export function localEpochNow(): number {
   return Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
 }

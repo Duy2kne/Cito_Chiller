@@ -55,4 +55,13 @@ describe('nhat ky – dich', () => {
     expect(isAlarmEvent(fromTuple([T, EV.BOOT, 7, 2048]))).toBe(true); // watchdog
     expect(isAlarmEvent(fromTuple([T, EV.BOOT, 1, 2048]))).toBe(false);
   });
+
+  it('loi E13..E19: ERR_SET cho E1..E16, ERR_SET_HI cho E17+', () => {
+    expect(describeEvent(fromTuple([T, EV.ERR_SET, 4, 1 << 12]))).toContain('E13');
+    expect(describeEvent(fromTuple([T, EV.ERR_SET, 4, 1 << 14]))).toContain('E15');
+    expect(describeEvent(fromTuple([T, EV.ERR_SET_HI, 4, 1 << 1]))).toContain('E18');
+    expect(describeEvent(fromTuple([T, EV.ERR_SET_HI, 4, 1 << 2]))).toContain('E19');
+    expect(describeEvent(fromTuple([T, EV.ERR_CLEAR_HI, 3, 1 << 0]))).toMatch(/^Hết lỗi: E17/);
+    expect(isAlarmEvent(fromTuple([T, EV.ERR_SET_HI, 4, 2]))).toBe(true);
+  });
 });

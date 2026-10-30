@@ -5,7 +5,25 @@
 
 import { describe, it, expect } from 'vitest';
 import { PacketFramingBuffer, applyPacket, INITIAL_APP_STATE } from './packetParser';
-import { formatCurrent, parseErrors, LOCKED_ERRORS_BITMASK, ERROR_COUNT, ERROR_DEFINITIONS } from '../types/system';
+import {
+  formatCurrent,
+  formatEnergy,
+  parseErrors,
+  LOCKED_ERRORS_BITMASK,
+  ERROR_COUNT,
+  ERROR_DEFINITIONS,
+} from '../types/system';
+
+describe('formatEnergy', () => {
+  it('shows Wh below 1 kWh, kWh with 1 decimal below 100, integer above', () => {
+    expect(formatEnergy(0)).toBe('0 Wh');
+    expect(formatEnergy(0.35)).toBe('350 Wh');
+    expect(formatEnergy(0.9996)).toBe('1000 Wh');
+    expect(formatEnergy(1)).toBe('1.0 kWh');
+    expect(formatEnergy(12.84)).toBe('12.8 kWh');
+    expect(formatEnergy(128.4)).toBe('128 kWh');
+  });
+});
 
 describe('formatCurrent', () => {
   it('formats current under 1000 mA as mA', () => {

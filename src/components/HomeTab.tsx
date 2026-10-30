@@ -61,7 +61,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   const handleAdjustTemp = (delta: number) => {
     if (!isConnected) return;
     isEditingTempRef.current = true;
-    const newTemp = Math.round(Math.min(35.0, Math.max(5.0, localSetTemp + delta)) * 10) / 10;
+    const newTemp = Math.round(Math.min(35.0, Math.max(0.0, localSetTemp + delta)) * 10) / 10;
     setLocalSetTemp(newTemp);
 
     if (debounceTimerRef.current !== null) {
@@ -291,7 +291,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               <span>Độ chênh chạy lại: <strong>{config?.diff ?? 1.0} °C</strong></span>
               <span>•</span>
               <span>
-                Chạy lại khi: <strong>{((localSetTemp || 20) + (config?.diff ?? 1.0)).toFixed(1)} °C</strong>
+                Chạy lại khi: <strong>{((localSetTemp ?? 20) + (config?.diff ?? 1.0)).toFixed(1)} °C</strong>
               </span>
             </div>
           )}
@@ -319,6 +319,11 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             <span className="text-2xl font-bold font-mono text-cyan-300">
               {isConnected ? localSetTemp.toFixed(1) : '—'} <span className="text-base">°C</span>
             </span>
+            {isConnected && localSetTemp < 5 && (
+              <span className="block max-w-[11rem] mx-auto text-[10px] leading-tight text-amber-300 mt-1">
+                Dưới 5 °C: block lạnh dễ chạm ngưỡng chống đông (E5), máy có thể dừng liên tục
+              </span>
+            )}
           </div>
 
           <button
@@ -666,6 +671,18 @@ export const HomeTab: React.FC<HomeTabProps> = ({
                 <p className="text-slate-400 text-[11px]">
                   <strong>Gợi ý xử lý:</strong> {err.suggestedAction}
                 </p>
+                {err.steps.length > 0 && (
+                  <details className="text-[11px] text-slate-300">
+                    <summary className="cursor-pointer select-none font-semibold text-slate-200">
+                      Cách xử lý từng bước
+                    </summary>
+                    <ol className="list-decimal pl-5 mt-1.5 space-y-1">
+                      {err.steps.map((st, i) => (
+                        <li key={i}>{st}</li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
               </div>
             ))}
           </div>

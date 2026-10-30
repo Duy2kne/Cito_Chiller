@@ -46,6 +46,7 @@ export const TechTab: React.FC<TechTabProps> = ({
   const [offW, setOffW] = useState<number>(config?.off_w ?? 0);
   const [offC, setOffC] = useState<number>(config?.off_c ?? 0);
   const [offH, setOffH] = useState<number>(config?.off_h ?? 0);
+  const [offH2, setOffH2] = useState<number>(config?.off_h2 ?? 0);
 
   // Gia tri trong o lay theo may moi khi goi "cf" doi (mo tab truoc khi co cf, hoac doi tren may).
   // Khong dong bo -> o dang la 0 / 82.7 mac dinh, bam Luu se GHI DE gia tri that cua may.
@@ -53,7 +54,8 @@ export const TechTab: React.FC<TechTabProps> = ({
     if (config?.off_w !== undefined) setOffW(config.off_w);
     if (config?.off_c !== undefined) setOffC(config.off_c);
     if (config?.off_h !== undefined) setOffH(config.off_h);
-  }, [config?.off_w, config?.off_c, config?.off_h]);
+    if (config?.off_h2 !== undefined) setOffH2(config.off_h2);
+  }, [config?.off_w, config?.off_c, config?.off_h, config?.off_h2]);
 
   // WiFi inputs
   const [selectedSsid, setSelectedSsid] = useState<string>('');
@@ -106,6 +108,8 @@ export const TechTab: React.FC<TechTabProps> = ({
         off_w: offW,
         off_c: offC,
         off_h: offH,
+        // Firmware cu khong co T4 -> khong gui (tranh may bao loi khoa la)
+        ...(config?.off_h2 !== undefined ? { off_h2: offH2 } : {}),
       });
     } catch (e) {
       console.warn('Failed to save offsets', e);
@@ -184,7 +188,7 @@ export const TechTab: React.FC<TechTabProps> = ({
           </div>
           <div>
             <h3 className="font-bold text-white text-base">Bù Sai Số Nhiệt Độ</h3>
-            <p className="text-xs text-slate-400">So với nhiệt kế chuẩn rồi nhập độ lệch (T4 cục nóng 2 chưa có bù)</p>
+            <p className="text-xs text-slate-400">So với nhiệt kế chuẩn rồi nhập độ lệch</p>
           </div>
         </div>
 
@@ -203,7 +207,7 @@ export const TechTab: React.FC<TechTabProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800 text-center">
               <span className="text-slate-400 block mb-1">T1 Nước</span>
               <input
@@ -240,6 +244,21 @@ export const TechTab: React.FC<TechTabProps> = ({
                 value={offH}
                 onChange={(e) => setOffH(parseFloat(e.target.value) || 0)}
                 className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-center font-mono text-cyan-300 font-bold"
+              />
+            </div>
+
+            <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800 text-center">
+              <span className="text-slate-400 block mb-1">T4 Cục Nóng 2</span>
+              <input
+                type="number"
+                step="0.1"
+                min={-10}
+                max={10}
+                value={offH2}
+                disabled={config?.off_h2 === undefined}
+                title={config?.off_h2 === undefined ? 'Cần nạp firmware mới để bù T4' : undefined}
+                onChange={(e) => setOffH2(parseFloat(e.target.value) || 0)}
+                className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-center font-mono text-cyan-300 font-bold disabled:opacity-40"
               />
             </div>
           </div>

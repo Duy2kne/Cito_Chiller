@@ -5,7 +5,7 @@
 
 import { AnyPacket, PacketAck } from '../types/system';
 import { DemoChillerDevice } from './demo';
-import { localEpochNow } from './history';
+import { localEpochNow, timeSyncDue, TIME_RESYNC_MS, TIME_RETRY_MS } from './history';
 import { AppState, INITIAL_APP_STATE, PacketFramingBuffer, applyPacket } from './packetParser';
 
 export const CHILLER_SERVICE_UUID = 'f54c14eb-99db-4d72-85fa-a58e08cc73d6';
@@ -55,6 +55,10 @@ export class ChillerBleManager {
   }[] = [];
   private isWriting: boolean = false;
   private currentPendingAck: CommandPending | null = null;
+
+  // Dong bo gio (may khong co dong ho): gui sau khi dang nhap, gui lai khi may bao mat gio (tk = 0)
+  // va dinh ky TIME_RESYNC_MS de chinh sai lech dong ho thach anh
+  private lastTimeSync: number = 0;
 
   // Auto reconnection state
   private reconnectAttempt: number = 0;
@@ -378,8 +382,8 @@ export class ChillerBleManager {
             this.setConnectionState('connected', this.deviceName);
             this.reconnectAttempt = 0;
             this.notifyToast('success', pkt.msg || 'Kết nối thành công!');
-            // May khong co dong ho: gui gio dien thoai -> nhat ky co gio that
-            this.sendCommand('TIME_SET', { t: localEpochNow() }).catch(() => undefined);
+            // May khong co dong ho: gui gio dien thoai -> nhat ky + dong ho tren man co gio that
+            this.syncTime();
           } else {
             this.notifyPinRequired(pkt.msg || 'Mã PIN không đúng');
             this.notifyToast('error', pkt.msg || 'Sai mã PIN');
@@ -399,9 +403,24 @@ export class ChillerBleManager {
       }
     }
 
+    // May bao chua co gio (khoi dong lai sau mat dien / lenh TIME_SET truoc bi lo) -> gui lai ngay;
+    // co gio roi thi dong bo lai dinh ky. Firmware cu khong gui tk -> khong lam gi them.
+    if (pkt.t === 'st' && this.connectionState === 'connected' && timeSyncDue(pkt.tk, this.lastTimeSync, Date.now())) {
+      this.syncTime();
+    }
+
     // Apply packet to app state purely
     this.state = applyPacket(this.state, pkt);
     this.notifyState();
+  }
+
+  // Gui gio dien thoai xuong may (lan gui sau do timeSyncDue quyet dinh).
+  private syncTime() {
+    const now = Date.now();
+    this.lastTimeSync = now;
+    this.sendCommand('TIME_SET', { t: localEpochNow() }).catch(() => {
+      this.lastTimeSync = now - TIME_RESYNC_MS + TIME_RETRY_MS;   // Loi -> thu lai sau TIME_RETRY_MS
+    });
   }
 
   // --- Send AUTH command ---

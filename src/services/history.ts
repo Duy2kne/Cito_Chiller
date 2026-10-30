@@ -163,6 +163,7 @@ export function describeEvent(e: HistoryEvent): string {
     case EV.DEFAULTS:
       return 'Về cài đặt mặc định';
     case EV.ACS_ZERO:
+      if (e.val >= 11 && e.val <= 13) return `Hiệu chỉnh cảm biến dòng ${['quạt', 'sò 1', 'sò 2'][e.val - 11]} theo ampe kìm`;
       return 'Đo điểm 0 A cảm biến dòng';
     case EV.WIFI_UP:
       return `Kết nối WiFi nhà (−${e.val} dBm)`;

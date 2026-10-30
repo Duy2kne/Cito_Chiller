@@ -5,7 +5,18 @@
 
 import { describe, expect, it } from 'vitest';
 import { INITIAL_APP_STATE, applyPacket } from './packetParser';
-import { EV, HISTORY_MAX, describeEvent, eventDay, formatEventTime, fromTuple, isAlarmEvent } from './history';
+import {
+  EV,
+  HISTORY_MAX,
+  TIME_RESYNC_MS,
+  TIME_RETRY_MS,
+  describeEvent,
+  eventDay,
+  formatEventTime,
+  fromTuple,
+  isAlarmEvent,
+  timeSyncDue,
+} from './history';
 import { HistoryTuple } from '../types/system';
 
 const T = 1793175600; // 28/10/2026 08:20:00 gio dia phuong
@@ -62,5 +73,14 @@ describe('nhat ky – dich', () => {
     expect(describeEvent(fromTuple([T, EV.ERR_SET_HI, 4, 1 << 1]))).toContain('E18');
     expect(describeEvent(fromTuple([T, EV.ERR_CLEAR_HI, 3, 1 << 0]))).toMatch(/^Hết lỗi: E17/);
     expect(isAlarmEvent(fromTuple([T, EV.ERR_SET_HI, 4, 2]))).toBe(true);
+  });
+
+  it('dong bo gio: may mat gio -> gui lai sau 10s, co gio -> moi 30 phut, firmware cu -> khong', () => {
+    const t0 = 1_000_000;
+    expect(timeSyncDue(0, t0, t0 + TIME_RETRY_MS - 1)).toBe(false);
+    expect(timeSyncDue(0, t0, t0 + TIME_RETRY_MS)).toBe(true);
+    expect(timeSyncDue(1, t0, t0 + TIME_RETRY_MS)).toBe(false);
+    expect(timeSyncDue(1, t0, t0 + TIME_RESYNC_MS)).toBe(true);
+    expect(timeSyncDue(undefined, t0, t0 + 10 * TIME_RESYNC_MS)).toBe(false);
   });
 });

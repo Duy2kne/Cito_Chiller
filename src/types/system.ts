@@ -153,7 +153,7 @@ export type AnyPacket =
 
 // Error definition
 export interface ErrorInfo {
-  code: string; // E1 - E19
+  code: string; // E1 - E18
   bit: number;
   name: string;
   description: string;
@@ -167,8 +167,8 @@ export interface ErrorInfo {
 // Bits 3, 5, 6, 7, 8, 9, 10, 12, 13 => 0x37E8
 export const LOCKED_ERRORS_BITMASK = 0x37e8;
 
-// So ma loi firmware gui (bit b = E(b+1)); firmware 2.0 build 30/10/2026: E1..E19
-export const ERROR_COUNT = 19;
+// So ma loi firmware gui (bit b = E(b+1)); firmware 2.0 build 30/10/2026: E1..E18
+export const ERROR_COUNT = 18;
 
 export const ERROR_DEFINITIONS: Record<number, Omit<ErrorInfo, 'bit'>> = {
   1: {
@@ -429,20 +429,6 @@ export const ERROR_DEFINITIONS: Record<number, Omit<ErrorInfo, 'bit'>> = {
       'Xem RPM quạt 1 / quạt 2 ở trang chủ để biết quạt nào chậm.',
       'Vệ sinh bụi bám ở cánh và trục quạt chậm.',
       'Quạt kêu to / rung → bạc đạn mòn, nên thay sớm trước khi thành lỗi E6 / E7.',
-    ],
-  },
-  19: {
-    code: 'E19',
-    name: 'Nguồn điện không ổn định',
-    description: 'Máy tự khởi động lại 3 lần liên tiếp do sụt áp / treo trong thời gian ngắn.',
-    isLocked: false,
-    isWarningOnly: true,
-    suggestedAction: 'Kiểm tra nguồn 12 V và dây nguồn.',
-    steps: [
-      'Kiểm tra adapter / nguồn 12 V đủ công suất (≥ tổng công suất máy + 20%).',
-      'Kiểm tra dây nguồn, giắc DC, cầu đấu có lỏng / nóng / oxi hóa không.',
-      'Tránh cắm chung ổ với máy bơm lớn, máy sưởi.',
-      'Bấm "Xóa lỗi" để đếm lại; máy chạy ổn định 1 giờ cảnh báo tự hết.',
     ],
   },
 };

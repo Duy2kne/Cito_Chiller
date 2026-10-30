@@ -90,6 +90,7 @@ export class DemoChillerDevice {
     off_w: 0.0,
     off_c: 0.0,
     off_h: 0.0,
+    off_h2: 0.0,
     z_f: 1.65,
     z_p1: 1.65,
     z_p2: 1.65,
@@ -246,7 +247,12 @@ export class DemoChillerDevice {
       // Demo: may co lap T4 (cuc nong 2), chay thap hon T3 ~1.2 °C
       const h = this.status.h;
       this.status.h2 = h === null ? null : +(h - 1.2).toFixed(1);
-      packet = { ...packet, h2: this.status.h2 };
+      // Cong suat = dong do x 12 V; kWh thang tang dan theo cong suat (demo tick ~1 s)
+      const ma = this.status.p[0][4] + this.status.p[1][4] + this.status.f.ma;
+      this.status.vn = 12;
+      this.status.wt = Math.round((ma * 12) / 1000);
+      this.status.kwh = +((this.status.kwh ?? 0) + this.status.wt / 3600000).toFixed(4);
+      packet = { ...packet, h2: this.status.h2, vn: this.status.vn, wt: this.status.wt, kwh: this.status.kwh };
     }
     if (this.onPacketCallback) {
       this.onPacketCallback(packet);

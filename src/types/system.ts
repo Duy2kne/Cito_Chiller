@@ -8,6 +8,8 @@ export interface ChillerStatus {
   w: number | null; // T1 Water temp (°C) - null = sensor error
   c: number | null; // T2 Cold block temp (°C) - null = sensor error
   h: number | null; // T3 Hot heatsink temp (°C) - null = sensor error
+  h2?: number | null; // T4 Hot heatsink 2 (°C) - absent = not fitted, null = sensor error
+  kwh?: number; // Energy used this month (kWh), counted by the machine
   set: number; // Target temperature (°C)
   pw: number; // 0 = OFF, 1 = ON (Cooling power)
   fm: number; // Fan mode: 0: Auto, 1: Medium (Êm), 2: Emergency (Mạnh)
@@ -60,6 +62,7 @@ export interface ChillerConfig {
   s2off: number; // 0 - s2on °C: Water < set + s2off -> back to 1 TEC
   min_on: number; // 5 - 600 s: Min TEC runtime
   min_off: number; // 10 - 900 s: Min TEC rest time
+  // Hot side = T3, or the higher of T3/T4 once T4 is fitted
   hot_red: number; // °C: T3 >= hot_red -> reduce 1 TEC
   hot_max: number; // 40 - 90 °C: T3 >= hot_max -> cutoff (E4)
   hot_clr: number; // °C: T3 < hot_clr before E4 can be cleared
@@ -178,16 +181,16 @@ export const ERROR_DEFINITIONS: Record<number, Omit<ErrorInfo, 'bit'>> = {
   },
   3: {
     code: 'E3',
-    name: 'Cảm biến cục nóng T3 lỗi',
-    description: 'Mất tín hiệu cảm biến nhiệt độ tản nhiệt nóng.',
+    name: 'Cảm biến cục nóng T3/T4 lỗi',
+    description: 'Mất tín hiệu cảm biến nhiệt độ tản nhiệt nóng (T3, hoặc T4 nếu máy có lắp).',
     isLocked: false,
     isWarningOnly: false,
-    suggestedAction: 'Kiểm tra đầu dò T3 trên dàn tản nhiệt quạt.',
+    suggestedAction: 'Kiểm tra đầu dò T3 / T4 trên dàn tản nhiệt quạt.',
   },
   4: {
     code: 'E4',
     name: 'Cục nóng quá nhiệt',
-    description: 'Nhiệt độ tản nhiệt T3 vượt ngưỡng an toàn (hot_max).',
+    description: 'Nhiệt độ tản nhiệt T3 (hoặc T4 nếu có lắp) vượt ngưỡng an toàn (hot_max).',
     isLocked: true,
     isWarningOnly: false,
     suggestedAction: 'Chờ tản nhiệt nguội dưới hot_clr, kiểm tra quạt và thông gió.',

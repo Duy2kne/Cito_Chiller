@@ -25,6 +25,7 @@ import {
 import { ChillerConfig, ChillerStatus, formatCurrent } from '../types/system';
 import { bleManager } from '../services/bleService';
 import { ManualControlSection } from './ManualControlSection';
+import { CurrentCalibration } from './CurrentCalibration';
 
 interface TechTabProps {
   status: ChillerStatus | null;
@@ -45,10 +46,6 @@ export const TechTab: React.FC<TechTabProps> = ({
   const [offW, setOffW] = useState<number>(config?.off_w ?? 0);
   const [offC, setOffC] = useState<number>(config?.off_c ?? 0);
   const [offH, setOffH] = useState<number>(config?.off_h ?? 0);
-  const [kF, setKF] = useState<number>(config?.k_f ?? 82.7);
-  const [kP1, setKP1] = useState<number>(config?.k_p1 ?? 82.7);
-  const [kP2, setKP2] = useState<number>(config?.k_p2 ?? 82.7);
-  const [isCalibratingZero, setIsCalibratingZero] = useState<boolean>(false);
 
   // Gia tri trong o lay theo may moi khi goi "cf" doi (mo tab truoc khi co cf, hoac doi tren may).
   // Khong dong bo -> o dang la 0 / 82.7 mac dinh, bam Luu se GHI DE gia tri that cua may.
@@ -57,11 +54,6 @@ export const TechTab: React.FC<TechTabProps> = ({
     if (config?.off_c !== undefined) setOffC(config.off_c);
     if (config?.off_h !== undefined) setOffH(config.off_h);
   }, [config?.off_w, config?.off_c, config?.off_h]);
-  useEffect(() => {
-    if (config?.k_f !== undefined) setKF(config.k_f);
-    if (config?.k_p1 !== undefined) setKP1(config.k_p1);
-    if (config?.k_p2 !== undefined) setKP2(config.k_p2);
-  }, [config?.k_f, config?.k_p1, config?.k_p2]);
 
   // WiFi inputs
   const [selectedSsid, setSelectedSsid] = useState<string>('');
@@ -120,26 +112,6 @@ export const TechTab: React.FC<TechTabProps> = ({
     }
   };
 
-  // He so ACS712 (so dem ADC / 1 A), may ep vao 33 - 207
-  const handleSaveAcsK = async () => {
-    if (!isConnected) return;
-    try {
-      await bleManager.setConfig({ k_f: kF, k_p1: kP1, k_p2: kP2 });
-    } catch (e) {
-      console.warn('Failed to save ACS factors', e);
-    }
-  };
-
-  // Zero ACS712
-  const handleAcsZero = async () => {
-    if (!isConnected) return;
-    setIsCalibratingZero(true);
-    try {
-      await bleManager.zeroAcs();
-    } finally {
-      setIsCalibratingZero(false);
-    }
-  };
 
   // WiFi operations
   const handleScanWifi = async () => {
@@ -193,10 +165,6 @@ export const TechTab: React.FC<TechTabProps> = ({
     setConfirmModal(null);
   };
 
-  const areLoadsOff =
-    (status?.p?.[0]?.[0] ?? 0) === 0 &&
-    (status?.p?.[1]?.[0] ?? 0) === 0 &&
-    (status?.f?.pct ?? 0) === 0;
 
   return (
     <div className="space-y-5 max-w-xl mx-auto pb-10">
@@ -215,8 +183,8 @@ export const TechTab: React.FC<TechTabProps> = ({
             <Gauge className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-bold text-white text-base">Hiệu Chuẩn Cảm Biến</h3>
-            <p className="text-xs text-slate-400">Bù nhiệt độ và chỉnh cảm biến dòng ACS712</p>
+            <h3 className="font-bold text-white text-base">Bù Sai Số Nhiệt Độ</h3>
+            <p className="text-xs text-slate-400">So với nhiệt kế chuẩn rồi nhập độ lệch (T4 cục nóng 2 chưa có bù)</p>
           </div>
         </div>
 
@@ -277,77 +245,10 @@ export const TechTab: React.FC<TechTabProps> = ({
           </div>
         </div>
 
-        {/* ACS712 Zero Calibration */}
-        <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-slate-200 block">
-                Đo Điểm 0 A Cảm Biến Dòng (ACS_ZERO)
-              </span>
-              <p className="text-[11px] text-slate-400">
-                Lấy lại điểm điện áp 0A tĩnh cho cả 3 cảm biến ACS712 (Quạt, Sò 1, Sò 2).
-              </p>
-            </div>
-            <button
-              onClick={handleAcsZero}
-              disabled={!isConnected || !areLoadsOff || isCalibratingZero}
-              className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-30 disabled:hover:bg-teal-600 text-white font-semibold text-xs rounded-xl shadow transition cursor-pointer shrink-0 ml-3"
-            >
-              {isCalibratingZero ? 'Đang đo...' : 'Đo Điểm 0A'}
-            </button>
-          </div>
-
-          {!areLoadsOff && isConnected && (
-            <p className="text-[11px] text-amber-300 bg-amber-950/40 p-2 rounded border border-amber-600/30">
-              * Nút bị khóa: Hãy tắt làm lạnh (quạt và sò đều dừng hẳn) thì máy mới cho phép đo 0A.
-            </p>
-          )}
-
-          <div className="text-[11px] text-slate-400 border-t border-slate-800 pt-2 space-y-1 font-mono">
-            <div>Điện áp 0A hiện tại: z_f={config?.z_f ?? '—'}V | z_p1={config?.z_p1 ?? '—'}V | z_p2={config?.z_p2 ?? '—'}V</div>
-          </div>
-
-          {/* He so ACS712: chinh theo ampe kim */}
-          <div className="space-y-2 border-t border-slate-800 pt-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-semibold text-slate-200">Hệ số cảm biến dòng (số đếm / 1 A)</span>
-              <button
-                onClick={handleSaveAcsK}
-                disabled={!isConnected}
-                className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition"
-              >
-                Lưu Hệ Số
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              {(
-                [
-                  ['Quạt', kF, setKF],
-                  ['Sò 1 + van', kP1, setKP1],
-                  ['Sò 2', kP2, setKP2],
-                ] as [string, number, (v: number) => void][]
-              ).map(([label, val, set]) => (
-                <div key={label} className="bg-slate-950/60 p-2 rounded-xl border border-slate-800 text-center">
-                  <span className="text-slate-400 block mb-1">{label}</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min={33}
-                    max={207}
-                    value={val}
-                    onChange={(e) => set(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-center font-mono text-cyan-300 font-bold"
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="text-[11px] text-cyan-400/90 italic">
-              Chạy 1 tải ở mục Kiểm tra, đo bằng ampe kìm: Hệ số mới = Hệ số cũ × (Dòng trên App / Dòng ampe kìm).
-              Mặc định 82.7 (ACS712-20A).
-            </div>
-          </div>
-        </div>
       </div>
+
+      {/* 2b. HIEU CHUAN CAM BIEN DONG (buoc 1: 0 A, buoc 2: ampe kim) */}
+      <CurrentCalibration status={status} config={config} isConnected={isConnected} />
 
       {/* 3. SIMULATION CONTROLS (Only visible if st.sim = 1 or Demo mode) */}
       {((status?.sim ?? 0) === 1 || isDemo) && (

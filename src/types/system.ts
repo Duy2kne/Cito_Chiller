@@ -48,6 +48,7 @@ export interface ChillerStatus {
     rssi: number; // Signal strength dBm
   };
   up: number; // Uptime in seconds
+  tk?: number; // 1 = machine knows the time (set by app), 0 = lost (power cut) -> app re-sends TIME_SET
   heap: number; // Free RAM in bytes
   maxblk: number; // Largest RAM block in bytes
   sim: number; // Simulation mode active (0/1)
@@ -443,6 +444,16 @@ export function formatCurrent(mA: number): string {
     return `${Math.round(mA)} mA`;
   }
   return `${(mA / 1000).toFixed(2)} A`;
+}
+
+/**
+ * Format energy (kWh from the machine):
+ * below 1 kWh -> Wh (e.g. "350 Wh"), below 100 kWh -> 1 decimal ("12.8 kWh"), else integer ("128 kWh")
+ */
+export function formatEnergy(kWh: number): string {
+  if (kWh < 1) return `${Math.round(kWh * 1000)} Wh`;
+  if (kWh < 100) return `${kWh.toFixed(1)} kWh`;
+  return `${Math.round(kWh)} kWh`;
 }
 
 /**

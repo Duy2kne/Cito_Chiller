@@ -522,6 +522,11 @@ export class ChillerBleManager {
     return this.sendCommand('TEST_SET', { p1, p2, fan });
   }
 
+  /** Chinh he so dem/A theo ampe kim: ch 0 quat / 1 so 1 + van / 2 so 2, ma = dong ampe kim (mA). */
+  public async calAcs(ch: number, ma: number): Promise<PacketAck> {
+    return this.sendCommand('ACS_CAL', { ch, ma });
+  }
+
   public async zeroAcs(): Promise<PacketAck> {
     return this.sendCommand('ACS_ZERO');
   }

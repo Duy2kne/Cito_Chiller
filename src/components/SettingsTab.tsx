@@ -395,7 +395,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
                   <label className="text-slate-300 font-medium block">
                     Giảm 1 sò khi T3 nóng (hot_red):
                   </label>
-                  <span className="text-[10px] text-slate-400">T3 ≥ mức này thì giảm 1 sò (°C)</span>
+                  <span className="text-[10px] text-slate-400">T3/T4 ≥ mức này thì giảm 1 sò (°C)</span>
                   <input
                     type="number"
                     value={formData.hot_red ?? config?.hot_red ?? 65}
@@ -408,7 +408,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
                   <label className="text-slate-300 font-medium block">
                     Ngắt quá nhiệt T3 (hot_max):
                   </label>
-                  <span className="text-[10px] text-slate-400">T3 ≥ mức này ngắt máy báo lỗi E4 (40–90°C)</span>
+                  <span className="text-[10px] text-slate-400">T3/T4 ≥ mức này ngắt máy báo lỗi E4 (40–90°C)</span>
                   <input
                     type="number"
                     value={formData.hot_max ?? config?.hot_max ?? 75}
@@ -421,7 +421,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
                   <label className="text-slate-300 font-medium block">
                     Nhiệt độ xóa lỗi E4 (hot_clr):
                   </label>
-                  <span className="text-[10px] text-slate-400">T3 &lt; mức này mới xóa được lỗi E4 (°C)</span>
+                  <span className="text-[10px] text-slate-400">T3/T4 &lt; mức này mới xóa được lỗi E4 (°C)</span>
                   <input
                     type="number"
                     value={formData.hot_clr ?? config?.hot_clr ?? 55}

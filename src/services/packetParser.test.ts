@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { PacketFramingBuffer, applyPacket, INITIAL_APP_STATE } from './packetParser';
-import { formatCurrent, parseErrors, LOCKED_ERRORS_BITMASK } from '../types/system';
+import { formatCurrent, parseErrors, LOCKED_ERRORS_BITMASK, ERROR_COUNT, ERROR_DEFINITIONS } from '../types/system';
 
 describe('formatCurrent', () => {
   it('formats current under 1000 mA as mA', () => {
@@ -60,18 +60,32 @@ describe('parseErrors', () => {
     expect(res.activeErrors.every((e) => e.isLocked)).toBe(true);
   });
 
-  it('checks LOCKED_ERRORS_BITMASK matches specification (0x07E8)', () => {
-    // Bits 3 (E4), 5 (E6), 6 (E7), 7 (E8), 8 (E9), 9 (E10), 10 (E11)
+  it('checks LOCKED_ERRORS_BITMASK matches specification (0x37E8)', () => {
+    // Bits 3 (E4), 5 (E6), 6 (E7), 7 (E8), 8 (E9), 9 (E10), 10 (E11), 12 (E13), 13 (E14)
     const calculatedMask =
-      (1 << 3) |
-      (1 << 5) |
-      (1 << 6) |
-      (1 << 7) |
-      (1 << 8) |
-      (1 << 9) |
-      (1 << 10);
-    expect(calculatedMask).toBe(0x07e8);
-    expect(LOCKED_ERRORS_BITMASK).toBe(0x07e8);
+      (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 12) | (1 << 13);
+    expect(calculatedMask).toBe(0x37e8);
+    expect(LOCKED_ERRORS_BITMASK).toBe(0x37e8);
+  });
+
+  it('error table E1..E19 is consistent with the locked mask and has customer steps', () => {
+    for (let n = 1; n <= ERROR_COUNT; n++) {
+      const d = ERROR_DEFINITIONS[n];
+      expect(d, `E${n}`).toBeDefined();
+      expect(d.code).toBe(`E${n}`);
+      expect(d.isLocked).toBe((LOCKED_ERRORS_BITMASK & (1 << (n - 1))) !== 0);
+      expect(d.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('parses new errors: E13 locked, E15 warning, E18 above 16 bits', () => {
+    const e13 = 1 << 12, e15 = 1 << 14, e18 = 1 << 17;
+    const res = parseErrors(e13 | e15 | e18, e15 | e18);
+    expect(res.activeErrors.map((e) => e.code)).toEqual(['E13', 'E15', 'E18']);
+    expect(res.hasLockedErrors).toBe(true);
+    expect(res.activeErrors.find((e) => e.code === 'E13')?.isWarningOnly).toBe(false);
+    expect(res.activeErrors.find((e) => e.code === 'E15')?.isWarningOnly).toBe(true);
+    expect(res.activeErrors.find((e) => e.code === 'E18')?.isWarningOnly).toBe(true);
   });
 });
 

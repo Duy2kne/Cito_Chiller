@@ -165,6 +165,17 @@ export const HomeTab: React.FC<HomeTabProps> = ({
 
   const isPowerOn = (status?.pw ?? 0) === 1;
   const currentFanMode = status?.fm ?? config?.mode ?? 0;
+  // Che do quat: 0 Tu dong (theo T3 + do lech nuoc), 1 Em / 2 Vua / 3 Max = toc do co dinh
+  const fanModes = [
+    { label: 'Tự Động', pct: undefined },
+    { label: 'Êm', pct: config?.fmax_q ?? 50 },
+    { label: 'Vừa', pct: config?.fmax_m ?? 80 },
+    { label: 'Max', pct: config?.fmax_e ?? 100 },
+  ];
+  const fanModeText = (m: number) => {
+    const f = fanModes[m] ?? fanModes[0];
+    return f.pct === undefined ? f.label : `${f.label} ${f.pct}%`;
+  };
 
   // Water temp display: if null -> "Lỗi cảm biến", do NOT show old value
   const waterTemp = status?.w;
@@ -382,51 +393,33 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           </span>
         </button>
 
-        {/* Fan Mode Selector (Segmented 3-button) */}
+        {/* Fan Mode Selector (Segmented 4-button) */}
         <div className="bg-slate-800/90 border border-slate-700 p-2.5 rounded-2xl flex flex-col justify-between">
           <div className="flex items-center justify-between px-1 mb-1.5">
             <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1">
               <Fan className="w-3.5 h-3.5 text-cyan-400" /> Chế độ quạt
             </span>
             <span className="text-[11px] text-cyan-400 font-semibold font-mono">
-              {currentFanMode === 0 ? 'Tự Động' : currentFanMode === 1 ? 'Êm Ái' : 'Mạnh / Khẩn Cấp'}
+              {fanModeText(currentFanMode)}
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 bg-slate-900/80 p-1 rounded-xl">
-            <button
-              onClick={() => handleSetFanMode(0)}
-              disabled={!isConnected}
-              className={`py-2 px-1 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                currentFanMode === 0
-                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-900/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              Tự Động
-            </button>
-            <button
-              onClick={() => handleSetFanMode(1)}
-              disabled={!isConnected}
-              className={`py-2 px-1 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                currentFanMode === 1
-                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-900/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              Êm (Vừa)
-            </button>
-            <button
-              onClick={() => handleSetFanMode(2)}
-              disabled={!isConnected}
-              className={`py-2 px-1 text-xs font-semibold rounded-lg transition cursor-pointer ${
-                currentFanMode === 2
-                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-900/40'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              Mạnh (Tối Đa)
-            </button>
+          <div className="grid grid-cols-4 gap-1.5 bg-slate-900/80 p-1 rounded-xl">
+            {fanModes.map((f, m) => (
+              <button
+                key={m}
+                onClick={() => handleSetFanMode(m)}
+                disabled={!isConnected}
+                className={`py-2 px-1 text-xs font-semibold rounded-lg transition cursor-pointer leading-tight ${
+                  currentFanMode === m
+                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-900/40'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                {f.label}
+                {f.pct !== undefined && <span className="block text-[10px] font-normal opacity-80">{f.pct}%</span>}
+              </button>
+            ))}
           </div>
         </div>
       </div>

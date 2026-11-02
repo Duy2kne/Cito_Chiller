@@ -101,6 +101,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
     'fan_off',
     'fan_min',
     'fmax_a',
+    'fmax_q',
     'fmax_m',
     'fmax_e',
     'fan_runon',

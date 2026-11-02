@@ -105,6 +105,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
     'fmax_m',
     'fmax_e',
     'fan_runon',
+    'run_max',
+    'rest',
     'fan_rpm',
     'fan_rpmx',
   ];
@@ -490,6 +492,40 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ config, isConnected })
                     value={formData.fan_off ?? config?.fan_off ?? 45}
                     onChange={(e) => handleChange('fan_off', parseInt(e.target.value))}
                     className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono"
+                  />
+                </div>
+
+                <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                  <label className="text-slate-300 font-medium block">
+                    Quạt nghỉ sau khi chạy liên tục (run_max):
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Phút (15 – 600). Sò vẫn làm lạnh trong lúc quạt nghỉ. 0 = quạt không nghỉ
+                  </span>
+                  <input
+                    type="number"
+                    disabled={config?.run_max === undefined}
+                    title={config?.run_max === undefined ? 'Cần nạp firmware mới' : undefined}
+                    value={formData.run_max ?? config?.run_max ?? 60}
+                    onChange={(e) => handleChange('run_max', parseInt(e.target.value))}
+                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                  <label className="text-slate-300 font-medium block">
+                    Quạt nghỉ tối đa (rest):
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Phút (1 – 15). Cục nóng tăng 5 °C hoặc chạm ngưỡng thì quạt chạy lại ngay
+                  </span>
+                  <input
+                    type="number"
+                    disabled={config?.rest === undefined}
+                    title={config?.rest === undefined ? 'Cần nạp firmware mới' : undefined}
+                    value={formData.rest ?? config?.rest ?? 3}
+                    onChange={(e) => handleChange('rest', parseInt(e.target.value))}
+                    className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-cyan-300 font-mono disabled:opacity-50"
                   />
                 </div>
 

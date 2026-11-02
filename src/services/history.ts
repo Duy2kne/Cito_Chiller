@@ -64,7 +64,7 @@ const RESET_LABEL: Record<number, string> = {
   9: 'sụt nguồn – BROWNOUT',
 };
 
-const FAN_MODE_LABEL = ['Tự động', 'Êm', 'Mạnh'];
+const FAN_MODE_LABEL = ['Tự động', 'Êm', 'Vừa', 'Max'];
 
 export function fromTuple(x: HistoryTuple): HistoryEvent {
   return { t: x[0] >>> 0, type: x[1], src: x[2], val: x[3] };

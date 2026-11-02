@@ -9,7 +9,7 @@ export interface ChillerStatus {
   c: number | null; // T2 Cold block temp (°C) - null = sensor error
   h: number | null; // T3 Hot heatsink temp (°C) - null = sensor error
   h2?: number | null; // T4 Hot heatsink 2 (°C) - null = sensor error, absent = older firmware
-  kwh?: number; // Energy used this month (kWh), counted by the machine
+  kwh?: number; // Energy used in the last 30 days (kWh, rolling by day - not per calendar month), counted by the machine
   wt?: number; // Total power now (W) = measured current x nominal voltage (fan + 2 TECs)
   vn?: number; // Nominal supply voltage used for the power estimate (V)
   set: number; // Target temperature (°C)
@@ -20,6 +20,7 @@ export interface ChillerStatus {
   stg: number; // Stages needed according to temperature
   lim: number; // Stages allowed
   red: number; // 0/1: Stage reduction active due to hot T3
+  frest?: number; // 1 = fans silently resting (TECs keep running) - informational only
   // TEC1, TEC2 status: [on (0/1), bad (0/1), en (0/1), cur (0/1 has ACS712), ma (mA)]
   // Note: TEC1 is wired together with water valve (TEC1 on = valve open; TEC1 current includes valve current)
   p: [number, number, number, number, number][];
@@ -80,6 +81,8 @@ export interface ChillerConfig {
   fmax_e: number; // fan_min - 100 % (default 100): Fixed fan speed for MAX
   med_tec: number; // Unused (firmware always runs both TECs), kept for compatibility
   fan_runon: number; // 10 - 1800 s: Fan post-run cooldown time after TECs turn off
+  run_max?: number; // 0 or 15 - 600 min (default 60): fans ran this long with the TECs -> silent fan rest (0 = off)
+  rest?: number; // 1 - 15 min (default 3): max fan rest; TECs keep running, fans restart early if the hot side heats up
   fan_rpm: number; // RPM: Min RPM threshold (0 = no check)
   fan_rpmx: number; // RPM: Max RPM threshold (0 = no check)
   fan_ma: number; // 300 - 10000 mA: Max fan current cutoff (E8)

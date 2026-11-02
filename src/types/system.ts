@@ -14,7 +14,7 @@ export interface ChillerStatus {
   vn?: number; // Nominal supply voltage used for the power estimate (V)
   set: number; // Target temperature (°C)
   pw: number; // 0 = OFF, 1 = ON (Cooling power)
-  fm: number; // Fan mode: 0: Auto, 1: Medium (Êm), 2: Emergency (Mạnh)
+  fm: number; // Fan mode: 0 Auto, 1 Quiet (Êm, fixed fmax_q), 2 Medium (Vừa, fixed fmax_m), 3 Max (fixed fmax_e)
   st: number; // Machine state: 0 TẮT, 1 CHỜ, 2 KHỞI ĐỘNG, 3 LÀM LẠNH, 4 DỪNG, 5 LỖI, 6 KIỂM TRA
   ph: string; // Phase text on machine LCD (e.g. OFF, READY, WAIT, FAN CHECK, SOFT START, COOLING, COOLING (HOT), SOFT STOP, COOL-DOWN, FAULT, TEST (APP), OTA)
   stg: number; // Stages needed according to temperature
@@ -26,7 +26,7 @@ export interface ChillerStatus {
   // Fan status
   f: {
     pct: number; // Current PWM %
-    max: number; // Max PWM % allowed for current mode
+    max: number; // AUTO: max PWM %; Êm / Vừa / Max: fixed PWM % of current mode
     cur: number; // Has ACS712 sensor (0/1)
     ma: number; // Total fan current in mA
     rpm: [number, number]; // [fan1_rpm, fan2_rpm]
@@ -58,7 +58,7 @@ export interface ChillerStatus {
 export interface ChillerConfig {
   set: number; // 0 - 35 °C: Target water temperature (< 5 °C: block may hit anti-freeze E5)
   diff: number; // 0.5 - 2.0 °C: Differential before cooling restarts
-  mode: number; // 0, 1, 2: Fan mode
+  mode: number; // 0 Auto, 1 Êm, 2 Vừa, 3 Max: Fan mode
   pel1_en: number; // 0/1: Enable TEC1 + water valve
   pel2_en: number; // 0/1: Enable TEC2
   s2on: number; // diff - 10 °C: Water >= set + s2on -> 2 TECs
@@ -75,9 +75,10 @@ export interface ChillerConfig {
   fan_off: number; // °C (default 45): TEC off (also machine OFF) + hot side > fan_off -> fans keep cooling
   fan_min: number; // 10 - 100 %: Min fan speed when active
   fmax_a: number; // fan_min - 100 %: Max fan speed for AUTO
-  fmax_m: number; // fan_min - 100 %: Max fan speed for MEDIUM
-  fmax_e: number; // fan_min - 100 %: Max fan speed for EMERGENCY
-  med_tec: number; // 0 - 2: Max TEC stages allowed in MEDIUM mode
+  fmax_q?: number; // 30 - 100 % (default 50): Fixed fan speed for ÊM (firmware 2.0+)
+  fmax_m: number; // fan_min - 100 % (default 80): Fixed fan speed for VỪA
+  fmax_e: number; // fan_min - 100 % (default 100): Fixed fan speed for MAX
+  med_tec: number; // Unused (firmware always runs both TECs), kept for compatibility
   fan_runon: number; // 10 - 1800 s: Fan post-run cooldown time after TECs turn off
   fan_rpm: number; // RPM: Min RPM threshold (0 = no check)
   fan_rpmx: number; // RPM: Max RPM threshold (0 = no check)
@@ -387,7 +388,7 @@ export const ERROR_DEFINITIONS: Record<number, Omit<ErrorInfo, 'bit'>> = {
       'Bể có quá lớn so với công suất máy không? Trời nóng / đèn bể tỏa nhiệt nhiều cũng làm chậm.',
       'Làm sạch tản nhiệt và quạt; để máy nơi thoáng gió.',
       'Kiểm tra nước chảy qua máy đều (lưu lượng quá yếu hoặc quá mạnh đều giảm hiệu quả).',
-      'Kiểm tra cả 2 sò đều đang bật trong Cài đặt và chế độ quạt không phải "Êm" (giới hạn số sò).',
+      'Kiểm tra cả 2 sò đều đang bật trong Cài đặt; chế độ quạt "Êm" giải nhiệt yếu hơn, thử "Tự Động" hoặc "Max".',
       'Cảnh báo tự hết khi nước bắt đầu giảm hoặc đạt nhiệt độ.',
     ],
   },

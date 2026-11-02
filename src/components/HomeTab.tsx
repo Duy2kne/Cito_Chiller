@@ -23,6 +23,91 @@ import { ChillerConfig, ChillerStatus, formatCurrent, formatEnergy, getStateDeta
 import { bleManager } from '../services/bleService';
 import { ManualControlSection } from './ManualControlSection';
 
+// Gia tri chinh tren app (hien ngay), gui SET sau 600 ms ngung bam. Dung ref de giu nut (tu lap) cong don dung.
+function useMachineSetting(
+  machine: number | undefined,
+  key: string,
+  min: number,
+  max: number,
+  fallback: number,
+  isConnected: boolean
+): [number, (delta: number) => void] {
+  const [local, setLocal] = useState<number>(machine ?? fallback);
+  const localRef = useRef<number>(machine ?? fallback);
+  const timerRef = useRef<number | null>(null);
+  const editingRef = useRef<boolean>(false);
+
+  // Theo gia tri may gui ve khi khong dang bam (ke ca khi chinh bang nut tren may)
+  useEffect(() => {
+    if (!editingRef.current && machine !== undefined) {
+      setLocal(machine);
+      localRef.current = machine;
+    }
+  }, [machine]);
+
+  const adjust = (delta: number) => {
+    if (!isConnected) return;
+    editingRef.current = true;
+    const v = Math.round(Math.min(max, Math.max(min, localRef.current + delta)) * 10) / 10;
+    localRef.current = v;
+    setLocal(v);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(async () => {
+      editingRef.current = false;
+      try {
+        await bleManager.setConfig({ [key]: v });
+      } catch (e) {
+        console.warn(`Failed to set ${key}`, e);
+      }
+    }, 600);
+  };
+  return [local, adjust];
+}
+
+// Nua khung chinh so: nhan, [-] gia tri [+], dong goi y
+const HalfStepper: React.FC<{
+  label: string;
+  value: string;
+  unit: string;
+  disabled: boolean;
+  onStart: (delta: number) => void;
+  onStop: () => void;
+  step: number;
+  children?: React.ReactNode;
+}> = ({ label, value, unit, disabled, onStart, onStop, step, children }) => {
+  const btn =
+    'h-11 w-full bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-40 text-cyan-300 ' +
+    'rounded-xl flex items-center justify-center shadow transition border border-slate-700 cursor-pointer';
+  const hold = (d: number) => ({
+    onMouseDown: () => onStart(d),
+    onMouseUp: onStop,
+    onMouseLeave: onStop,
+    onTouchStart: () => onStart(d),
+    onTouchEnd: onStop,
+  });
+  return (
+    <div className="bg-slate-900/60 p-3 rounded-2xl min-w-0 flex flex-col">
+      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-medium block text-center">
+        {label}
+      </span>
+      <div className="text-center mt-1">
+        <span className="text-2xl font-bold font-mono text-cyan-300 whitespace-nowrap">
+          {value} <span className="text-base">{unit}</span>
+        </span>
+      </div>
+      {children}
+      <div className="grid grid-cols-2 gap-2 mt-auto pt-2">
+        <button {...hold(-step)} disabled={disabled} className={btn} aria-label={`Giảm ${label}`}>
+          <Minus className="w-5 h-5" />
+        </button>
+        <button {...hold(step)} disabled={disabled} className={btn} aria-label={`Tăng ${label}`}>
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 interface HomeTabProps {
   status: ChillerStatus | null;
   config: ChillerConfig | null;
@@ -36,60 +121,18 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   isConnected,
   onOpenConnectModal,
 }) => {
-  // Local target temperature for responsive UI with 600ms debounce
-  const [localSetTemp, setLocalSetTemp] = useState<number>(20.0);
-  const debounceTimerRef = useRef<number | null>(null);
-  const isEditingTempRef = useRef<boolean>(false);
+  // Muc tieu (set) + do chenh chay lai (diff): hien ngay, gui SET sau 600 ms ngung bam
+  const [localSetTemp, adjustSet] = useMachineSetting(status?.set ?? config?.set, 'set', 0, 35, 20, isConnected);
+  const [localDiff, adjustDiff] = useMachineSetting(config?.diff, 'diff', 0.5, 2.0, 1.5, isConnected);
 
   // Power toggle confirmation dialog
   const [showPowerOffConfirm, setShowPowerOffConfirm] = useState<boolean>(false);
   const [isPowering, setIsPowering] = useState<boolean>(false);
   const [isClearingFaults, setIsClearingFaults] = useState<boolean>(false);
 
-  // Sync local temp from server/machine config when not actively typing/clicking
-  useEffect(() => {
-    if (!isEditingTempRef.current) {
-      if (status?.set !== undefined) {
-        setLocalSetTemp(status.set);
-      } else if (config?.set !== undefined) {
-        setLocalSetTemp(config.set);
-      }
-    }
-  }, [status?.set, config?.set]);
-
-  // Adjust temperature with debounce
-  const handleAdjustTemp = (delta: number) => {
-    if (!isConnected) return;
-    isEditingTempRef.current = true;
-    const newTemp = Math.round(Math.min(35.0, Math.max(0.0, localSetTemp + delta)) * 10) / 10;
-    setLocalSetTemp(newTemp);
-
-    if (debounceTimerRef.current !== null) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    debounceTimerRef.current = window.setTimeout(async () => {
-      isEditingTempRef.current = false;
-      try {
-        await bleManager.setConfig({ set: newTemp });
-      } catch (e) {
-        console.warn('Failed to set target temp', e);
-      }
-    }, 600);
-  };
-
-  // Continuous hold support for - / + buttons
+  // Giu nut -/+ : bam 1 buoc, giu 0.4 s thi tu lap moi 120 ms
   const holdIntervalRef = useRef<number | null>(null);
   const holdTimeoutRef = useRef<number | null>(null);
-
-  const startHold = (delta: number) => {
-    handleAdjustTemp(delta);
-    holdTimeoutRef.current = window.setTimeout(() => {
-      holdIntervalRef.current = window.setInterval(() => {
-        handleAdjustTemp(delta);
-      }, 120);
-    }, 400);
-  };
 
   const stopHold = () => {
     if (holdTimeoutRef.current !== null) {
@@ -100,6 +143,14 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       clearInterval(holdIntervalRef.current);
       holdIntervalRef.current = null;
     }
+  };
+
+  const startHold = (fn: (delta: number) => void) => (delta: number) => {
+    stopHold();
+    fn(delta);
+    holdTimeoutRef.current = window.setTimeout(() => {
+      holdIntervalRef.current = window.setInterval(() => fn(delta), 120);
+    }, 400);
   };
 
   // Power ON / OFF
@@ -296,59 +347,49 @@ export const HomeTab: React.FC<HomeTabProps> = ({
             )}
           </div>
 
-          {/* Quick differential hint */}
-          {isConnected && status?.w !== null && status?.w !== undefined && (
-            <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-              <span>Độ chênh chạy lại: <strong>{config?.diff ?? 1.0} °C</strong></span>
-              <span>•</span>
-              <span>
-                Chạy lại khi: <strong>{((localSetTemp ?? 20) + (config?.diff ?? 1.0)).toFixed(1)} °C</strong>
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* Target Temp Adjustment (- / +) */}
-        <div className="mt-5 pt-4 border-t border-slate-700/60 flex items-center justify-between bg-slate-900/60 p-3.5 rounded-2xl">
-          <button
-            onMouseDown={() => startHold(-0.1)}
-            onMouseUp={stopHold}
-            onMouseLeave={stopHold}
-            onTouchStart={() => startHold(-0.1)}
-            onTouchEnd={stopHold}
+        {/* Muc tieu | Do chenh chay lai (chia doi) */}
+        <div className="mt-5 pt-4 border-t border-slate-700/60 grid grid-cols-2 gap-2">
+          <HalfStepper
+            label="Mục tiêu"
+            value={isConnected ? localSetTemp.toFixed(1) : '—'}
+            unit="°C"
+            step={0.1}
             disabled={!isConnected}
-            className="w-12 h-12 bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-40 text-cyan-300 rounded-xl flex items-center justify-center shadow transition border border-slate-700 cursor-pointer text-xl"
-            aria-label="Giảm nhiệt độ"
+            onStart={startHold(adjustSet)}
+            onStop={stopHold}
           >
-            <Minus className="w-6 h-6" />
-          </button>
-
-          <div className="text-center">
-            <span className="text-[11px] uppercase tracking-wider text-slate-400 font-medium block">
-              Mục Tiêu Đặt
-            </span>
-            <span className="text-2xl font-bold font-mono text-cyan-300">
-              {isConnected ? localSetTemp.toFixed(1) : '—'} <span className="text-base">°C</span>
-            </span>
-            {isConnected && localSetTemp < 5 && (
-              <span className="block max-w-[11rem] mx-auto text-[10px] leading-tight text-amber-300 mt-1">
-                Dưới 5 °C: block lạnh dễ chạm ngưỡng chống đông (E5), máy có thể dừng liên tục
+            {isConnected && localSetTemp < 5 ? (
+              <span className="block text-center text-[10px] leading-tight text-amber-300 mt-1.5">
+                Dưới 5 °C: block lạnh dễ chạm ngưỡng chống đông (E5)
+              </span>
+            ) : (
+              <span className="block text-center text-[10px] text-slate-400 mt-1.5">
+                {isConnected ? 'Máy giữ nước ở mức này' : '0 – 35 °C'}
               </span>
             )}
-          </div>
-
-          <button
-            onMouseDown={() => startHold(0.1)}
-            onMouseUp={stopHold}
-            onMouseLeave={stopHold}
-            onTouchStart={() => startHold(0.1)}
-            onTouchEnd={stopHold}
+          </HalfStepper>
+          <HalfStepper
+            label="Độ chênh chạy lại"
+            value={isConnected ? `+${localDiff.toFixed(1)}` : '—'}
+            unit="°C"
+            step={0.1}
             disabled={!isConnected}
-            className="w-12 h-12 bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-40 text-cyan-300 rounded-xl flex items-center justify-center shadow transition border border-slate-700 cursor-pointer text-xl"
-            aria-label="Tăng nhiệt độ"
+            onStart={startHold(adjustDiff)}
+            onStop={stopHold}
           >
-            <Plus className="w-6 h-6" />
-          </button>
+            <span className="block text-center text-[10px] text-slate-400 mt-1.5">
+              {isConnected ? (
+                <>
+                  Chạy lại khi nước ≥{' '}
+                  <strong className="text-slate-200">{(localSetTemp + localDiff).toFixed(1)} °C</strong>
+                </>
+              ) : (
+                '0.5 – 2.0 °C'
+              )}
+            </span>
+          </HalfStepper>
         </div>
       </div>
 
@@ -507,7 +548,14 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               <span className="text-sm font-bold font-mono text-cyan-300">{tec2Current}</span>
             </div>
             <p className="text-[10px] text-slate-400">
-              {status?.stg === 2 ? 'Kích hoạt hỗ trợ tầng 2' : 'Sẵn sàng khi nước tăng'}
+              {/* May luon chay CA 2 so khi lam lanh (khong con chay 1 so / tang 2) */}
+              {tec2Bad
+                ? 'Đang lỗi – xem khung lỗi bên dưới'
+                : !tec2En
+                ? 'Đã tắt để bảo trì (Cài đặt)'
+                : tec2On
+                ? 'Đang làm lạnh cùng sò 1'
+                : `Nghỉ – chạy lại khi nước ≥ ${(localSetTemp + localDiff).toFixed(1)} °C`}
             </p>
           </div>
         </div>
@@ -561,7 +609,7 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         </div>
       </div>
 
-      {/* Power now + energy this month */}
+      {/* Power now + energy of the last 30 days (rolling) */}
       <div className="p-4 rounded-2xl border border-slate-700/80 bg-slate-800/80">
         <div className="flex items-center justify-between mb-3 gap-2">
           <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
@@ -587,14 +635,14 @@ export const HomeTab: React.FC<HomeTabProps> = ({
           </div>
 
           <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400">Điện tháng này</div>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400">Điện 30 ngày gần nhất</div>
             <div className="text-2xl font-bold font-mono text-emerald-400 mt-0.5">
               {!isConnected || status?.kwh === undefined ? '—' : formatEnergy(status.kwh)}
             </div>
             <div className="text-[10px] text-slate-400 mt-1">
               {isConnected && status?.kwh === undefined
                 ? 'Cần nạp firmware mới để đếm điện năng'
-                : 'Máy tự đếm, sang tháng mới đếm lại từ 0'}
+                : 'Máy tự cộng dồn 30 ngày gần nhất, mỗi ngày mới bỏ ngày cũ nhất'}
             </div>
           </div>
         </div>

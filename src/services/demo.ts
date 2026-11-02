@@ -85,6 +85,8 @@ export class DemoChillerDevice {
     fmax_e: 100,
     med_tec: 1,
     fan_runon: 60,
+    run_max: 60,
+    rest: 3,
     fan_rpm: 1200,
     fan_rpmx: 4500,
     fan_ma: 2500,
@@ -250,7 +252,7 @@ export class DemoChillerDevice {
       // Demo: may co lap T4 (cuc nong 2), chay thap hon T3 ~1.2 °C
       const h = this.status.h;
       this.status.h2 = h === null ? null : +(h - 1.2).toFixed(1);
-      // Cong suat = dong do x 12 V; kWh thang tang dan theo cong suat (demo tick ~1 s)
+      // Cong suat = dong do x 12 V; kWh 30 ngay gan nhat tang dan theo cong suat (demo tick ~1 s)
       const ma = this.status.p[0][4] + this.status.p[1][4] + this.status.f.ma;
       this.status.vn = 12;
       this.status.wt = Math.round((ma * 12) / 1000);

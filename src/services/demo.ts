@@ -80,7 +80,8 @@ export class DemoChillerDevice {
     fan_off: 45,
     fan_min: 25,
     fmax_a: 100,
-    fmax_m: 65,
+    fmax_q: 50,
+    fmax_m: 80,
     fmax_e: 100,
     med_tec: 1,
     fan_runon: 60,
@@ -363,8 +364,9 @@ export class DemoChillerDevice {
 
         // Fan speed based on mode
         let fanPct = 65;
-        if (this.config.mode === 1) fanPct = this.config.fmax_m || 50;
-        if (this.config.mode === 2) fanPct = this.config.fmax_e || 100;
+        if (this.config.mode === 1) fanPct = this.config.fmax_q || 50;
+        if (this.config.mode === 2) fanPct = this.config.fmax_m || 80;
+        if (this.config.mode === 3) fanPct = this.config.fmax_e || 100;
         this.status.f.pct = fanPct;
         this.status.f.rpm = [Math.round(2000 + fanPct * 12), Math.round(2020 + fanPct * 12)];
         this.status.f.ma = Math.round(300 + fanPct * 4.5);
